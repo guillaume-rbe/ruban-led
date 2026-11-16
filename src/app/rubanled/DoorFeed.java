@@ -20,11 +20,14 @@ import android.util.Log;
  * (unregPropIdList), for code 15 only. Nothing is ever sent to the MCU or the car.
  *
  * Code 15, key "doorval": 0x80 driver, 0x40 passenger, 0x20 rear right, 0x10 rear left,
- * 0x08 boot, 0x04 frunk.
+ * 0x08 boot, 0x04 frunk. Code 9, keys "leftlight" / "rightlight": the indicators, 1 = lit,
+ * 2 = off; they follow the actual flashing (docs/FIELD_MAP.md in Binnacle).
  */
 final class DoorFeed {
     interface Listener {
         void onDoors(int doorval);
+        /** Indicator lamps as last reported (each message may carry only some keys). */
+        void onIndicators(boolean left, boolean right);
         void onFeedState(String text);
     }
 
@@ -33,7 +36,7 @@ final class DoorFeed {
     private static final String SVC_ACTION = "com.xbs.canapp.action.mcuservice";
     private static final String SVC_PKG = "com.xbs.canapp";
     private static final int TX_REGISTER = 1, TX_UNREGISTER = 2;
-    private static final int CODE_DOORS = 15;
+    private static final int CODE_DOORS = 15, CODE_LIGHTS = 9;
     private static final long RETRY_MS = 5000;
 
     private final Context ctx;
@@ -46,6 +49,7 @@ final class DoorFeed {
     private volatile boolean running;
     private volatile IBinder binder;
     private boolean registered;
+    private boolean left, right;
 
     DoorFeed(Context ctx, Listener listener) {
         this.ctx = ctx.getApplicationContext();
@@ -54,9 +58,16 @@ final class DoorFeed {
         worker = new Handler(workerThread.getLooper());
         messenger = new Messenger(new Handler(Looper.getMainLooper()) {
             @Override public void handleMessage(Message msg) {
-                if (!running || msg.what != CODE_DOORS) return;
+                if (!running) return;
                 try {
                     Bundle b = msg.getData();
+                    if (msg.what == CODE_LIGHTS) {
+                        left = lit(b, "leftlight", left);
+                        right = lit(b, "rightlight", right);
+                        DoorFeed.this.listener.onIndicators(left, right);
+                        return;
+                    }
+                    if (msg.what != CODE_DOORS) return;
                     Object o = b.get("doorval");
                     int v;
                     if (o instanceof Number) v = ((Number) o).intValue();
@@ -68,6 +79,15 @@ final class DoorFeed {
                 }
             }
         });
+    }
+
+    private static boolean lit(Bundle b, String k, boolean def) {
+        if (!b.containsKey(k)) return def;
+        Object o = b.get(k);
+        if (o instanceof Number) return ((Number) o).intValue() == 1;
+        if (o instanceof Boolean) return (Boolean) o;
+        if (o instanceof String) return "1".equals(((String) o).trim()) || "true".equalsIgnoreCase(((String) o).trim());
+        return def;
     }
 
     void start() {
@@ -155,7 +175,7 @@ final class DoorFeed {
             d.writeInterfaceToken(DESCRIPTOR);
             d.writeInt(1);
             messenger.writeToParcel(d, 0);
-            d.writeIntArray(new int[] {CODE_DOORS});
+            d.writeIntArray(new int[] {CODE_DOORS, CODE_LIGHTS});
             Parcel r = call(TX_REGISTER, d);
             registered = r != null && r.readInt() != 0;
             if (r != null) r.recycle();

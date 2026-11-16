@@ -65,6 +65,11 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private boolean blinking;
     private boolean blinkPhase;
     private long blinkUntil;
+    /** Hazard lights on (both indicators seen lit together): the strip blinks until they stop. */
+    private boolean hazardOn;
+    private long lastBothLitMs;
+    /** Indicators flash about every 0.7 s: no "both lit" for this long means the hazards are off. */
+    private static final long HAZARD_OFF_MS = 2500;
     private Boolean lastNight;
     private boolean brightnessPending;
     private boolean intro;
@@ -314,7 +319,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable blinkTick = new Runnable() {
         @Override public void run() {
             if (!blinking) return;
-            if (SystemClock.elapsedRealtime() > blinkUntil) {
+            if (!hazardOn && SystemClock.elapsedRealtime() > blinkUntil) {
                 stopBlink();
                 return;
             }
@@ -348,6 +353,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     }
 
     private void stopBlinkNoRestore() {
+        hazardOn = false;
+        main.removeCallbacks(hazardCheck);
         intro = false;
         main.removeCallbacks(introTick);
         blinking = false;
@@ -461,8 +468,35 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         doorsOpen = open;
         if (open && introPending && settings.intro) maybeIntro();     // getting in: the animation
         else if (open && settings.doorBlink) startBlink(settings.blinkMaxSec);
-        else if (!open) stopBlink();
+        else if (!open && !hazardOn) stopBlink();
     }
+
+    @Override public void onIndicators(boolean left, boolean right) {
+        if (!left || !right) return;            // one side alone is a turn signal
+        lastBothLitMs = SystemClock.elapsedRealtime();
+        if (hazardOn || !settings.hazard) return;
+        hazardOn = true;
+        startBlink(settings.blinkMaxSec);
+        ruleText = "Warnings : clignotement";
+        main.removeCallbacks(hazardCheck);
+        main.postDelayed(hazardCheck, 500);
+    }
+
+    private final Runnable hazardCheck = new Runnable() {
+        @Override public void run() {
+            if (!hazardOn) return;
+            if (SystemClock.elapsedRealtime() - lastBothLitMs < HAZARD_OFF_MS) {
+                main.postDelayed(this, 500);
+                return;
+            }
+            hazardOn = false;
+            if (doorsOpen && settings.doorBlink) {
+                blinkUntil = SystemClock.elapsedRealtime() + settings.blinkMaxSec * 1000L;   // the door blink goes on
+            } else {
+                stopBlink();
+            }
+        }
+    };
 
     @Override public void onFeedState(String text) {
         feedText = text;

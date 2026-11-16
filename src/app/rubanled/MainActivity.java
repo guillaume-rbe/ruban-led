@@ -23,7 +23,7 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView status;
     private EditText address, blinkMs, blinkMax, nightStart, nightEnd, nightPct;
-    private CheckBox doorBlink, bootFrunk, intro, night;
+    private CheckBox doorBlink, bootFrunk, hazard, intro, night;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
     private static final long COLOUR_THROTTLE_MS = 200;
 
@@ -72,6 +72,7 @@ public final class MainActivity extends Activity {
         address = field(col, "Adresse Bluetooth du ruban", s.address, false);
         doorBlink = check(col, "Clignoter quand une porte est ouverte", s.doorBlink);
         bootFrunk = check(col, "… aussi pour le coffre et le frunk", s.bootAndFrunk);
+        hazard = check(col, "Clignoter avec les warnings", s.hazard);
         blinkMs = field(col, "Vitesse du clignotement (ms)", "" + s.blinkMs, true);
         blinkMax = field(col, "Durée maximale du clignotement (s)", "" + s.blinkMaxSec, true);
         intro = check(col, "Animation d'allumage à la première porte ouverte en montant", s.intro);
@@ -133,6 +134,7 @@ public final class MainActivity extends Activity {
             s.address = address.getText().toString().trim().toUpperCase();
             s.doorBlink = doorBlink.isChecked();
             s.bootAndFrunk = bootFrunk.isChecked();
+            s.hazard = hazard.isChecked();
             s.blinkMs = clamp(num(blinkMs), 150, 5000);
             s.blinkMaxSec = clamp(num(blinkMax), 5, 3600);
             s.intro = intro.isChecked();

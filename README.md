@@ -15,6 +15,8 @@ Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprè
   Les portes se remplissent de l'arrière vers l'avant ; le tableau de bord part des deux bouts.
 - **Clignotement** : ensuite, chaque ouverture de porte, coffre ou frunk fait clignoter le ruban
   (couleur des animations, 100 % ↔ 1 %, 400 ms, 2 min max), puis le remet comme avant.
+- **Warnings** : tant que les feux de détresse sont allumés (les deux clignotants allumés en même
+  temps dans le flux CAN, code 9), le ruban clignote dans la couleur des animations.
 - **Veille** : quand l'écran s'éteint (voiture endormie), le ruban s'éteint. Utile car il est
   alimenté par l'USB de la boîte à gants, qui reste alimenté tant que la voiture est éveillée
   (Sentinelle comprise).

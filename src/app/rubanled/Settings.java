@@ -11,6 +11,7 @@ final class Settings {
     String address;
     boolean doorBlink;
     boolean bootAndFrunk;
+    boolean hazard;
     int defaultHue;
     int defaultSat;
     int blinkHue;
@@ -31,6 +32,7 @@ final class Settings {
         s.address = p.getString("address", DEFAULT_ADDRESS);
         s.doorBlink = p.getBoolean("doorBlink", true);
         s.bootAndFrunk = p.getBoolean("bootAndFrunk", true);
+        s.hazard = p.getBoolean("hazard", true);
         s.defaultHue = p.getInt("defaultHue", 0);
         s.defaultSat = p.getInt("defaultSat", 100);
         s.blinkHue = p.getInt("blinkHue", 0);
@@ -52,6 +54,7 @@ final class Settings {
             .putString("address", address)
             .putBoolean("doorBlink", doorBlink)
             .putBoolean("bootAndFrunk", bootAndFrunk)
+            .putBoolean("hazard", hazard)
             .putInt("defaultHue", defaultHue)
             .putInt("defaultSat", defaultSat)
             .putInt("blinkHue", blinkHue)
