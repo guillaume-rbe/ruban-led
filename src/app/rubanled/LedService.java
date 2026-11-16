@@ -33,8 +33,10 @@ import java.util.Map;
  * Keeps the strip connected and applies the rules (owner, 16 Nov):
  * - mirrors unfold (the owner is there): entrance animation, 3 times, then the steady colour;
  * - mirrors fold (the owner leaves): exit animation, 3 times, then off;
- * - a door opened: the entrance animation if the car just woke, otherwise a blink; afterwards
- *   always the steady colour, or off if the mirrors are folded;
+ * - the mirrors say whether the owner is there: folded, nothing lights up (no door blink, no
+ *   hazards, no gauge) to save energy;
+ * - a door opened with the owner there: a blink (without a mirror field: the entrance animation
+ *   for the first door after the car wakes); afterwards always the steady colour;
  * - charging: a green gauge, only while the mirrors are unfolded;
  * - night (19 h winter / 21 h summer to 7 h): everything at 20 %.
  * The rules run on their own high-priority thread (not the UI thread), so a door message is
@@ -661,7 +663,11 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (opened != 0) {
             event(describe(opened));
             if (intro) return;                          // the entrance animation goes on
-            if (introPending && settings.intro) maybeIntro();     // getting in: the animation
+            // the mirrors tell whether the owner is there (owner, 16 Nov): away, the strip stays
+            // off to save energy; there, the arrival animation came with the mirrors, so a blink
+            if (folded()) { event("Absent (rétros repliés) : ruban éteint"); return; }
+            if (mirrorsOpen != null) { if (settings.doorBlink) startBlink(settings.blinkMaxSec); return; }
+            if (introPending && settings.intro) maybeIntro();     // no mirror field: the first door
             else if (settings.doorBlink) startBlink(settings.blinkMaxSec);
         } else if (!open && !hazardOn) {
             stopBlink();
@@ -686,7 +692,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     @Override public void onIndicators(boolean left, boolean right) {
         if (!left || !right) return;            // one side alone is a turn signal
         lastBothLitMs = SystemClock.elapsedRealtime();
-        if (hazardOn || !settings.hazard) return;
+        if (hazardOn || !settings.hazard || folded()) return;     // away: no light
         hazardOn = true;
         event("Warnings");
         startBlink(settings.blinkMaxSec);

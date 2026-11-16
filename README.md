@@ -9,13 +9,14 @@ Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprè
 
 ## Ce qu'elle fait
 
-- **Rétroviseurs** (si configurés, voir plus bas) : quand ils se déplient (le propriétaire arrive),
-  animation d'allumage jouée **3 fois**, puis couleur permanente ; quand ils se replient (il part),
-  animation d'extinction **3 fois**, puis ruban éteint.
-- **Animation d'entrée** : à la première porte ouverte après le réveil de la voiture (écran rallumé,
+- **Rétroviseurs = présence** (si configurés, voir plus bas) : c'est le signe le plus fiable que
+  le propriétaire est là. Quand ils se déplient (il arrive), animation d'allumage jouée **3 fois**,
+  puis couleur permanente ; quand ils se replient (il part), animation d'extinction **3 fois**, puis
+  ruban éteint. Rétros repliés, rien ne s'allume (ni portes, ni warnings, ni jauge de recharge),
+  pour ne pas gaspiller d'énergie. Rétros dépliés, une porte qui s'ouvre fait clignoter le ruban.
+- **Animation d'entrée** (sans rétroviseurs configurés) : à la première porte ouverte après le réveil de la voiture (écran rallumé,
   ruban rebranché après plus d'une minute, démarrage de l'app), le ruban se remplit progressivement
-  (~5 s, **3 fois**) dans la couleur des animations, puis passe à la couleur permanente (ou s'éteint
-  si les rétros sont repliés). Les portes se remplissent de l'arrière vers l'avant ; le tableau de
+  (~5 s, **3 fois**) dans la couleur des animations, puis passe à la couleur permanente. Les portes se remplissent de l'arrière vers l'avant ; le tableau de
   bord part des deux bouts.
 - **Clignotement** : ensuite, chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
   ouverte) fait clignoter le ruban (couleur des animations, 100 % ↔ 1 %, 400 ms, 2 min max).
