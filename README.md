@@ -54,4 +54,17 @@ puis « Enregistrer ». Sur l'A007, ajouter `app.rubanled` dans `/data/system/ap
 (même ligne que `com.shilapi.xcertplay`, `autolaunch="2" secondarylaunch="2"`) pour qu'elle démarre
 avec l'écran.
 
-Signée avec la clé de debug du PC (`~/.android/debug.keystore`).
+Signée avec la clé de debug du PC (`~/.android/debug.keystore`). Garder toujours la même clé :
+sinon Android refuse la mise à jour.
+
+## Mises à jour depuis l'app
+
+Le bouton « Mise à jour » cherche dans les releases de `guillaume-rbe/binnacle` la plus récente
+taguée `ruban-led-v<versionCode>`, plus récente que la version installée. Il télécharge
+`ruban-led.apk`, vérifie son SHA-256 (`ruban-led.apk.sha256`), puis l'installe avec
+l'installateur d'Android, verrouillé sur ce paquet : Android affiche sa propre confirmation et
+n'accepte qu'une APK signée avec la même clé. La première fois, autoriser « Installer des
+applis inconnues » pour Ruban LED (l'app ouvre l'écran d'Android).
+
+Publier une version : augmenter `android:versionCode` dans `AndroidManifest.xml`, pousser la
+branche `ruban-led`, puis `bash release.sh` (crée la release avec `gh`, sans la marquer « latest »).

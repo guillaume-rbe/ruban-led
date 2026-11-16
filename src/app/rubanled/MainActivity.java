@@ -39,6 +39,10 @@ public final class MainActivity extends Activity {
         status = new TextView(this);
         status.setTextSize(15);
         col.addView(status);
+        updateText = new TextView(this);
+        updateText.setTextSize(13);
+        updateText.setText("Version " + Updater.installedVersion(this) + " · mises à jour : github.com/" + Updater.REPO);
+        col.addView(updateText);
 
         Settings s = Settings.load(this);
         LinearLayout wheels = new LinearLayout(this);
@@ -52,6 +56,12 @@ public final class MainActivity extends Activity {
         col.addView(wheels);
 
         LinearLayout buttons = new LinearLayout(this);
+        Button update = new Button(this);
+        update.setText("Mise à jour");
+        update.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { update(); }
+        });
+        buttons.addView(update);
         buttons.addView(button("Animation", LedService.ACTION_INTRO));
         buttons.addView(button("Test clignotement", LedService.ACTION_TEST_BLINK));
         buttons.addView(button("Couleur permanente", LedService.ACTION_DEFAULT));
@@ -100,6 +110,22 @@ public final class MainActivity extends Activity {
             main.postDelayed(this, 1000);
         }
     };
+
+    /** Version line under the status; updated by the Updater. */
+    private TextView updateText;
+
+    private void update() {
+        if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            // Android's own switch: Install unknown apps → Ruban LED
+            startActivity(new android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                android.net.Uri.parse("package:" + getPackageName())));
+            Toast.makeText(this, "Autoriser « Installer des applis inconnues », puis réessayer", Toast.LENGTH_LONG).show();
+            return;
+        }
+        new Updater(this, new Updater.Listener() {
+            @Override public void onUpdateStatus(String text) { updateText.setText(text); }
+        }).run();
+    }
 
     private void save() {
         try {
