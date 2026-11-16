@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Material theme, no action bar: the app draws its own header. -->
+    <style name="Ruban" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#1B1D22</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#E53935</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:textColorPrimary">#ECEFF1</item>
+        <item name="android:textColorSecondary">#9AA3AD</item>
+    </style>
+
+    <color name="bg">#0F1114</color>
+</resources>

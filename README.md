@@ -26,6 +26,7 @@ Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprè
   (Sentinelle comprise).
 - **Deux couleurs** réglables dans l'app, chacune avec sa roue et sa jauge de luminosité :
   couleur permanente, et couleur des animations (rouge 100 % par défaut).
+- Écran sombre en cartes : état, couleurs, actions, règles (interrupteurs enregistrés tout de suite), ruban et mise à jour.
 - Option : baisser la luminosité la nuit (heures réglables), désactivée par défaut.
 
 ## Câblage constaté

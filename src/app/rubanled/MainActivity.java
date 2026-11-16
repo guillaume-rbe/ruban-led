@@ -1,95 +1,159 @@
 package app.rubanled;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.os.SystemClock;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/** Settings and status, built in code (no layouts to keep the build to plain SDK tools). */
+/**
+ * Settings and status, built in code (plain SDK build, no layouts): a dark screen of cards.
+ * Left: status and the two colours. Right: actions, rules (switches save at once) and the strip.
+ */
 public final class MainActivity extends Activity {
+    // palette (dark theme, res/values/styles.xml)
+    private static final int BG = 0xFF0F1114;
+    private static final int CARD = 0xFF1B1E23;
+    private static final int CARD_LINE = 0xFF2A2F36;
+    private static final int TEXT = 0xFFECEFF1;
+    private static final int MUTED = 0xFF9AA3AD;
+    private static final int ACCENT = 0xFFE53935;
+    private static final int OK = 0xFF43A047;
+    private static final int WARN = 0xFFFFB300;
+
     private final Handler main = new Handler(Looper.getMainLooper());
-    private TextView status;
+    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText;
+    private View linkDot;
     private EditText address, blinkMs, blinkMax, nightStart, nightEnd, nightPct;
-    private CheckBox doorBlink, bootFrunk, hazard, intro, night;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
     private static final long COLOUR_THROTTLE_MS = 200;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         LedService.send(this, null);
-
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(16);
-        col.setPadding(pad, dp(8), pad, pad);
-
-        status = new TextView(this);
-        status.setTextSize(15);
-        col.addView(status);
-        updateText = new TextView(this);
-        updateText.setTextSize(13);
-        updateText.setText("Version " + Updater.installedVersion(this) + " · mises à jour : github.com/" + Updater.REPO);
-        col.addView(updateText);
-
         Settings s = Settings.load(this);
-        LinearLayout wheels = new LinearLayout(this);
-        wheels.setPadding(0, dp(8), 0, dp(4));
-        wheels.addView(new ColourPanel(LedService.TARGET_STEADY, "Couleur permanente",
-                s.defaultHue, s.defaultSat, s.dayPct).view,
-            new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        wheels.addView(new ColourPanel(LedService.TARGET_ANIM, "Couleur des animations (entrée, clignotement)",
-                s.blinkHue, s.blinkSat, s.blinkPct).view,
-            new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        col.addView(wheels);
 
-        LinearLayout buttons = new LinearLayout(this);
-        Button update = new Button(this);
-        update.setText("Mise à jour");
-        update.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { update(); }
-        });
-        buttons.addView(update);
-        buttons.addView(button("Animation", LedService.ACTION_INTRO));
-        buttons.addView(button("Test clignotement", LedService.ACTION_TEST_BLINK));
-        buttons.addView(button("Couleur permanente", LedService.ACTION_DEFAULT));
-        buttons.addView(button("Allumer", LedService.ACTION_ON));
-        buttons.addView(button("Éteindre", LedService.ACTION_OFF));
-        col.addView(buttons);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(20), dp(14), dp(20), dp(20));
+        page.setBackgroundColor(BG);
+        page.addView(header());
 
-        address = field(col, "Adresse Bluetooth du ruban", s.address, false);
-        doorBlink = check(col, "Clignoter quand une porte est ouverte", s.doorBlink);
-        bootFrunk = check(col, "… aussi pour le coffre et le frunk", s.bootAndFrunk);
-        hazard = check(col, "Clignoter avec les warnings", s.hazard);
-        blinkMs = field(col, "Vitesse du clignotement (ms)", "" + s.blinkMs, true);
-        blinkMax = field(col, "Durée maximale du clignotement (s)", "" + s.blinkMaxSec, true);
-        intro = check(col, "Animation d'allumage à la première porte ouverte en montant", s.intro);
-        night = check(col, "Baisser la luminosité la nuit", s.night);
-        nightStart = field(col, "Début de la nuit (heure 0-23)", "" + s.nightStart, true);
-        nightEnd = field(col, "Fin de la nuit (heure 0-23)", "" + s.nightEnd, true);
-        nightPct = field(col, "Luminosité la nuit (%)", "" + s.nightPct, true);
+        LinearLayout columns = new LinearLayout(this);
+        LinearLayout left = column(), right = column();
+        columns.addView(left, weight(1.15f, dp(14)));
+        columns.addView(right, weight(1f, 0));
+        page.addView(columns);
 
-        Button save = new Button(this);
-        save.setText("Enregistrer");
+        // ---- left: status, colours
+        LinearLayout status = card(left, "État");
+        LinearLayout linkRow = new LinearLayout(this);
+        linkRow.setGravity(Gravity.CENTER_VERTICAL);
+        linkDot = new View(this);
+        linkRow.addView(linkDot, new LinearLayout.LayoutParams(dp(12), dp(12)));
+        linkLine = text("", 17, TEXT, true);
+        linkLine.setPadding(dp(10), 0, 0, 0);
+        linkRow.addView(linkLine);
+        status.addView(linkRow);
+        stripLine = text("", 15, MUTED, false);
+        doorsLine = text("", 15, MUTED, false);
+        ruleLine = text("", 15, WARN, true);
+        status.addView(stripLine);
+        status.addView(doorsLine);
+        status.addView(ruleLine);
+
+        LinearLayout colours = card(left, "Couleurs");
+        colours.addView(new ColourPanel(LedService.TARGET_STEADY, "Permanente",
+            s.defaultHue, s.defaultSat, s.dayPct).view);
+        View sep = new View(this);
+        sep.setBackgroundColor(CARD_LINE);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+        sp.setMargins(0, dp(14), 0, dp(14));
+        colours.addView(sep, sp);
+        colours.addView(new ColourPanel(LedService.TARGET_ANIM, "Animations (entrée, clignotement, warnings)",
+            s.blinkHue, s.blinkSat, s.blinkPct).view);
+
+        // ---- right: actions, rules, strip
+        LinearLayout actions = card(right, "Actions");
+        LinearLayout row1 = new LinearLayout(this), row2 = new LinearLayout(this);
+        row1.addView(action("Animation d'entrée", LedService.ACTION_INTRO, true), weight(1, dp(8)));
+        row1.addView(action("Test clignotement", LedService.ACTION_TEST_BLINK, true), weight(1, 0));
+        row2.addView(action("Allumer", LedService.ACTION_ON, false), weight(1, dp(8)));
+        row2.addView(action("Éteindre", LedService.ACTION_OFF, false), weight(1, dp(8)));
+        row2.addView(action("Couleur permanente", LedService.ACTION_DEFAULT, false), weight(1.4f, 0));
+        actions.addView(row1);
+        LinearLayout.LayoutParams r2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        r2.topMargin = dp(8);
+        actions.addView(row2, r2);
+
+        LinearLayout rules = card(right, "Règles");
+        toggle(rules, "Animation d'entrée", "À la première porte ouverte après le réveil de la voiture",
+            s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } });
+        toggle(rules, "Clignoter quand une porte s'ouvre", null,
+            s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } });
+        toggle(rules, "… aussi coffre et frunk", null,
+            s.bootAndFrunk, new Toggle() { public void set(Settings x, boolean v) { x.bootAndFrunk = v; } });
+        toggle(rules, "Clignoter avec les warnings", null,
+            s.hazard, new Toggle() { public void set(Settings x, boolean v) { x.hazard = v; } });
+        toggle(rules, "Baisser la luminosité la nuit", null,
+            s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } });
+        LinearLayout n1 = new LinearLayout(this), n2 = new LinearLayout(this);
+        blinkMs = number(n1, "Clignotement (ms)", s.blinkMs);
+        blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
+        nightStart = number(n2, "Nuit de (h)", s.nightStart);
+        nightEnd = number(n2, "à (h)", s.nightEnd);
+        nightPct = number(n2, "Lum. nuit (%)", s.nightPct);
+        rules.addView(n1);
+        rules.addView(n2);
+
+        LinearLayout strip = card(right, "Ruban et application");
+        strip.addView(text("Adresse Bluetooth du ruban", 14, MUTED, false));
+        address = new EditText(this);
+        address.setText(s.address);
+        address.setSingleLine(true);
+        address.setTextColor(TEXT);
+        address.setHint("AA:BB:CC:DD:EE:FF");
+        address.setHintTextColor(0xFF5F6770);
+        strip.addView(address);
+        LinearLayout r3 = new LinearLayout(this);
+        Button save = pill("Enregistrer", true);
         save.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { save(); }
         });
-        col.addView(save);
+        Button update = pill("Mise à jour", false);
+        update.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { update(); }
+        });
+        r3.addView(save, weight(1, dp(8)));
+        r3.addView(update, weight(1, 0));
+        strip.addView(r3);
+        updateText = text("Version " + Updater.installedVersion(this) + "  ·  github.com/" + Updater.REPO, 13, MUTED, false);
+        updateText.setPadding(0, dp(8), 0, 0);
+        strip.addView(updateText);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.addView(col);
+        scroll.setBackgroundColor(BG);
+        scroll.addView(page);
         setContentView(scroll);
     }
 
@@ -105,40 +169,27 @@ public final class MainActivity extends Activity {
 
     private final Runnable refresh = new Runnable() {
         @Override public void run() {
+            String link = LedService.linkText;
+            boolean ok = "Ruban connecté".equals(link);
+            linkLine.setText(link);
+            dot(linkDot, ok ? OK : link.startsWith("Service") ? MUTED : WARN);
+            stripLine.setText(LedService.stripText);
+            doorsLine.setText(LedService.doorsText + "   ·   " + LedService.feedText);
             String rule = LedService.ruleText;
-            status.setText(LedService.linkText + " · " + LedService.stripText + "\n" + LedService.doorsText
-                + " · " + LedService.feedText + (rule.isEmpty() ? "" : " · " + rule));
+            ruleLine.setText(rule);
+            ruleLine.setVisibility(rule.isEmpty() ? View.GONE : View.VISIBLE);
             main.postDelayed(this, 1000);
         }
     };
 
-    /** Version line under the status; updated by the Updater. */
-    private TextView updateText;
-
-    private void update() {
-        if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
-            // Android's own switch: Install unknown apps → Ruban LED
-            startActivity(new android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                android.net.Uri.parse("package:" + getPackageName())));
-            Toast.makeText(this, "Autoriser « Installer des applis inconnues », puis réessayer", Toast.LENGTH_LONG).show();
-            return;
-        }
-        new Updater(this, new Updater.Listener() {
-            @Override public void onUpdateStatus(String text) { updateText.setText(text); }
-        }).run();
-    }
+    // ---- actions
 
     private void save() {
         try {
             Settings s = Settings.load(this);
             s.address = address.getText().toString().trim().toUpperCase();
-            s.doorBlink = doorBlink.isChecked();
-            s.bootAndFrunk = bootFrunk.isChecked();
-            s.hazard = hazard.isChecked();
             s.blinkMs = clamp(num(blinkMs), 150, 5000);
             s.blinkMaxSec = clamp(num(blinkMax), 5, 3600);
-            s.intro = intro.isChecked();
-            s.night = night.isChecked();
             s.nightStart = clamp(num(nightStart), 0, 23);
             s.nightEnd = clamp(num(nightEnd), 0, 23);
             s.nightPct = clamp(num(nightPct), 1, 100);
@@ -148,6 +199,156 @@ public final class MainActivity extends Activity {
         } catch (NumberFormatException e) {
             Toast.makeText(this, "Un nombre est invalide", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void update() {
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            // Android's own switch: Install unknown apps → Ruban LED
+            startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                android.net.Uri.parse("package:" + getPackageName())));
+            Toast.makeText(this, "Autoriser « Installer des applis inconnues », puis réessayer", Toast.LENGTH_LONG).show();
+            return;
+        }
+        new Updater(this, new Updater.Listener() {
+            @Override public void onUpdateStatus(String text) { updateText.setText(text); }
+        }).run();
+    }
+
+    private interface Toggle {
+        void set(Settings s, boolean v);
+    }
+
+    // ---- building blocks
+
+    private LinearLayout header() {
+        LinearLayout h = new LinearLayout(this);
+        h.setGravity(Gravity.CENTER_VERTICAL);
+        h.setPadding(dp(4), 0, 0, dp(12));
+        View bar = new View(this);
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(ACCENT);
+        g.setCornerRadius(dp(3));
+        bar.setBackground(g);
+        h.addView(bar, new LinearLayout.LayoutParams(dp(6), dp(30)));
+        TextView t = text("Ruban LED", 26, TEXT, true);
+        t.setPadding(dp(12), 0, 0, 0);
+        h.addView(t);
+        return h;
+    }
+
+    private LinearLayout column() {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        return c;
+    }
+
+    private LinearLayout card(LinearLayout parent, String title) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(dp(18), dp(14), dp(18), dp(16));
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(CARD);
+        g.setCornerRadius(dp(16));
+        g.setStroke(dp(1), CARD_LINE);
+        c.setBackground(g);
+        TextView t = text(title.toUpperCase(), 13, MUTED, true);
+        t.setLetterSpacing(0.08f);
+        t.setPadding(0, 0, 0, dp(10));
+        c.addView(t);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = dp(14);
+        parent.addView(c, lp);
+        return c;
+    }
+
+    private TextView text(String s, int sp, int colour, boolean bold) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextSize(sp);
+        t.setTextColor(colour);
+        if (bold) t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        t.setPadding(0, dp(2), 0, dp(2));
+        return t;
+    }
+
+    private Button pill(String label, boolean filled) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setTextSize(16);
+        b.setTextColor(filled ? Color.WHITE : TEXT);
+        b.setStateListAnimator(null);
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(dp(24));
+        if (filled) {
+            g.setColor(ACCENT);
+        } else {
+            g.setColor(0xFF262A30);
+            g.setStroke(dp(1), CARD_LINE);
+        }
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x40FFFFFF), g, null));
+        b.setMinHeight(dp(52));
+        return b;
+    }
+
+    private Button action(String label, final String action, boolean filled) {
+        Button b = pill(label, filled);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { LedService.send(MainActivity.this, action); }
+        });
+        return b;
+    }
+
+    /** A switch row that saves at once and tells the service. */
+    private void toggle(LinearLayout parent, String title, String sub, boolean value, final Toggle t) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+        LinearLayout texts = column();
+        texts.addView(text(title, 17, TEXT, false));
+        if (sub != null) texts.addView(text(sub, 13, MUTED, false));
+        row.addView(texts, weight(1, 0));
+        Switch sw = new Switch(this);
+        sw.setChecked(value);
+        sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton b, boolean v) {
+                Settings s = Settings.load(MainActivity.this);
+                t.set(s, v);
+                s.save(MainActivity.this);
+                LedService.send(MainActivity.this, LedService.ACTION_RELOAD);
+            }
+        });
+        row.addView(sw);
+        parent.addView(row);
+    }
+
+    /** A small labelled number field added to a row (saved with « Enregistrer »). */
+    private EditText number(LinearLayout row, String label, int value) {
+        LinearLayout box = column();
+        box.setPadding(0, dp(6), dp(12), 0);
+        box.addView(text(label, 13, MUTED, false));
+        EditText e = new EditText(this);
+        e.setText("" + value);
+        e.setSingleLine(true);
+        e.setTextColor(TEXT);
+        e.setInputType(InputType.TYPE_CLASS_NUMBER);
+        box.addView(e);
+        row.addView(box, weight(1, 0));
+        return e;
+    }
+
+    private void dot(View v, int colour) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(colour);
+        v.setBackground(g);
+    }
+
+    private LinearLayout.LayoutParams weight(float w, int rightMargin) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, w);
+        lp.rightMargin = rightMargin;
+        return lp;
     }
 
     /** One colour setting: wheel on the left; title, preview and brightness gauge on the right. */
@@ -165,25 +366,20 @@ public final class MainActivity extends Activity {
             sat = sat0;
             pct = pct0;
             LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
             ColourWheel wheel = new ColourWheel(MainActivity.this);
             wheel.setColour(hue, sat);
-            row.addView(wheel, new LinearLayout.LayoutParams(dp(210), dp(210)));
+            row.addView(wheel, new LinearLayout.LayoutParams(dp(170), dp(170)));
 
-            LinearLayout right = new LinearLayout(MainActivity.this);
-            right.setOrientation(LinearLayout.VERTICAL);
-            right.setPadding(dp(16), 0, dp(16), 0);
-            TextView t = new TextView(MainActivity.this);
-            t.setText(title);
-            t.setTextSize(16);
-            t.setTypeface(Typeface.DEFAULT_BOLD);
-            right.addView(t);
+            LinearLayout right = column();
+            right.setPadding(dp(18), 0, 0, 0);
+            right.addView(text(title, 17, TEXT, true));
             swatch = new View(MainActivity.this);
-            LinearLayout.LayoutParams sw = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
+            LinearLayout.LayoutParams sw = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36));
             sw.topMargin = dp(8);
             right.addView(swatch, sw);
-            pctLabel = new TextView(MainActivity.this);
-            pctLabel.setTextSize(16);
-            pctLabel.setPadding(0, dp(8), 0, 0);
+            pctLabel = text("", 15, MUTED, false);
+            pctLabel.setPadding(0, dp(10), 0, 0);
             right.addView(pctLabel);
             SeekBar bar = new SeekBar(MainActivity.this);
             bar.setMax(99);
@@ -197,8 +393,8 @@ public final class MainActivity extends Activity {
                 @Override public void onStartTrackingTouch(SeekBar b) {}
                 @Override public void onStopTrackingTouch(SeekBar b) { send(true); }
             });
-            right.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
-            row.addView(right, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+            right.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)));
+            row.addView(right, weight(1, 0));
 
             wheel.setListener(new ColourWheel.Listener() {
                 @Override public void onColour(int h, int s, boolean done) {
@@ -213,52 +409,24 @@ public final class MainActivity extends Activity {
         }
 
         private void preview() {
-            swatch.setBackgroundColor(Color.HSVToColor(new float[] {hue, sat / 100f, 0.25f + 0.75f * pct / 100f}));
-            pctLabel.setText("Luminosité : " + pct + " %");
+            GradientDrawable g = new GradientDrawable();
+            g.setCornerRadius(dp(10));
+            g.setColor(Color.HSVToColor(new float[] {hue, sat / 100f, 0.25f + 0.75f * pct / 100f}));
+            swatch.setBackground(g);
+            pctLabel.setText("Luminosité  " + pct + " %");
         }
 
         private void send(boolean done) {
             long now = SystemClock.elapsedRealtime();
             if (!done && now - lastSentMs < COLOUR_THROTTLE_MS) return;
             lastSentMs = now;
-            android.content.Intent i = new android.content.Intent(MainActivity.this, LedService.class)
+            Intent i = new Intent(MainActivity.this, LedService.class)
                 .setAction(LedService.ACTION_SET_COLOUR)
                 .putExtra("target", target)
                 .putExtra("hue", hue).putExtra("sat", sat).putExtra("pct", pct);
-            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(i);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
             else startService(i);
         }
-    }
-
-    private Button button(String text, final String action) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { LedService.send(MainActivity.this, action); }
-        });
-        return b;
-    }
-
-    private EditText field(LinearLayout col, String label, String value, boolean number) {
-        TextView l = new TextView(this);
-        l.setText(label);
-        l.setPadding(0, dp(12), 0, 0);
-        col.addView(l);
-        EditText e = new EditText(this);
-        e.setText(value);
-        e.setSingleLine(true);
-        if (number) e.setInputType(InputType.TYPE_CLASS_NUMBER);
-        col.addView(e);
-        return e;
-    }
-
-    private CheckBox check(LinearLayout col, String label, boolean value) {
-        CheckBox c = new CheckBox(this);
-        c.setText(label);
-        c.setChecked(value);
-        c.setPadding(0, dp(8), 0, 0);
-        col.addView(c);
-        return c;
     }
 
     private static int num(EditText e) {
