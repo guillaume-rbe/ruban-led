@@ -3,6 +3,9 @@ package app.rubanled;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.Calendar;
+import java.util.TimeZone;
+
 /** Saved settings (one SharedPreferences file). */
 final class Settings {
     /** No default: each strip has its own address, typed in the app (never committed). */
@@ -20,11 +23,28 @@ final class Settings {
     int blinkMs;
     int blinkMaxSec;
     boolean intro;
+    /** How many times the entrance / exit animations play (owner, 16 Nov: 3). */
+    int animRepeat;
+    /**
+     * Night mode, on by default (owner, 16 Nov): from nightStartWinter (19 h) in winter time and
+     * nightStartSummer (21 h) in summer time until nightEnd (7 h), everything at nightPct (20 %).
+     */
     boolean night;
-    int nightStart;
+    int nightStartWinter;
+    int nightStartSummer;
     int nightEnd;
     int nightPct;
     int dayPct;
+
+    /**
+     * Mirrors (owner, 16 Nov): the CAN field that tells folded from unfolded, found by the app's
+     * detection (it isn't in Binnacle's field map). mirrorCode -1 = not set up.
+     * mirrorOpen / mirrorFolded: the field's value (as text) in each state; "" = any other value.
+     */
+    int mirrorCode;
+    String mirrorKey;
+    String mirrorOpen;
+    String mirrorFolded;
 
     static Settings load(Context ctx) {
         SharedPreferences p = prefs(ctx);
@@ -41,11 +61,18 @@ final class Settings {
         s.blinkMs = p.getInt("blinkMs", 400);
         s.blinkMaxSec = p.getInt("blinkMaxSec", 120);
         s.intro = p.getBoolean("intro", true);
-        s.night = p.getBoolean("night", false);
-        s.nightStart = p.getInt("nightStart", 20);
-        s.nightEnd = p.getInt("nightEnd", 7);
-        s.nightPct = p.getInt("nightPct", 100);
+        s.animRepeat = p.getInt("animRepeat", 3);
+        // new keys in 0.5 so the new defaults (on, 20 %) apply to installs that had it off
+        s.night = p.getBoolean("night5", true);
+        s.nightStartWinter = p.getInt("nightStartWinter", 19);
+        s.nightStartSummer = p.getInt("nightStartSummer", 21);
+        s.nightEnd = p.getInt("nightEnd5", 7);
+        s.nightPct = p.getInt("nightPct5", 20);
         s.dayPct = p.getInt("dayPct", 100);
+        s.mirrorCode = p.getInt("mirrorCode", -1);
+        s.mirrorKey = p.getString("mirrorKey", "");
+        s.mirrorOpen = p.getString("mirrorOpen", "");
+        s.mirrorFolded = p.getString("mirrorFolded", "");
         return s;
     }
 
@@ -63,19 +90,64 @@ final class Settings {
             .putInt("blinkMs", blinkMs)
             .putInt("blinkMaxSec", blinkMaxSec)
             .putBoolean("intro", intro)
-            .putBoolean("night", night)
-            .putInt("nightStart", nightStart)
-            .putInt("nightEnd", nightEnd)
-            .putInt("nightPct", nightPct)
+            .putInt("animRepeat", animRepeat)
+            .putBoolean("night5", night)
+            .putInt("nightStartWinter", nightStartWinter)
+            .putInt("nightStartSummer", nightStartSummer)
+            .putInt("nightEnd5", nightEnd)
+            .putInt("nightPct5", nightPct)
             .putInt("dayPct", dayPct)
+            .putInt("mirrorCode", mirrorCode)
+            .putString("mirrorKey", mirrorKey)
+            .putString("mirrorOpen", mirrorOpen)
+            .putString("mirrorFolded", mirrorFolded)
             .apply();
     }
 
-    /** Night between nightStart (included) and nightEnd (excluded), across midnight if needed. */
-    boolean isNight(int hour) {
-        if (nightStart == nightEnd) return false;
-        if (nightStart < nightEnd) return hour >= nightStart && hour < nightEnd;
-        return hour >= nightStart || hour < nightEnd;
+    boolean mirrorsSetUp() {
+        return mirrorCode >= 0 && mirrorKey != null && !mirrorKey.isEmpty()
+            && !(mirrorOpen.isEmpty() && mirrorFolded.isEmpty());
+    }
+
+    /** Night mode on and it's night now. */
+    boolean nightNow() {
+        return night && isNight(Calendar.getInstance());
+    }
+
+    /** Start hour of tonight: the summer one in summer time, the winter one otherwise. */
+    int nightStart(Calendar c) {
+        return isSummerTime(c) ? nightStartSummer : nightStartWinter;
+    }
+
+    /** Night between the start (included) and nightEnd (excluded), across midnight if needed. */
+    boolean isNight(Calendar c) {
+        int hour = c.get(Calendar.HOUR_OF_DAY);
+        int start = nightStart(c);
+        if (start == nightEnd) return false;
+        if (start < nightEnd) return hour >= start && hour < nightEnd;
+        return hour >= start || hour < nightEnd;
+    }
+
+    /**
+     * Summer time: the time zone's own daylight saving when it has one; otherwise (a dash set to a
+     * fixed offset) the European rule, last Sunday of March to last Sunday of October.
+     */
+    static boolean isSummerTime(Calendar c) {
+        TimeZone tz = c.getTimeZone();
+        if (tz.useDaylightTime()) return tz.inDaylightTime(c.getTime());
+        int month = c.get(Calendar.MONTH);
+        if (month > Calendar.MARCH && month < Calendar.OCTOBER) return true;
+        if (month < Calendar.MARCH || month > Calendar.OCTOBER) return false;
+        int day = c.get(Calendar.DAY_OF_MONTH);
+        int lastSunday = lastSunday(c);
+        return month == Calendar.MARCH ? day >= lastSunday : day < lastSunday;
+    }
+
+    private static int lastSunday(Calendar c) {
+        Calendar x = (Calendar) c.clone();
+        x.set(Calendar.DAY_OF_MONTH, x.getActualMaximum(Calendar.DAY_OF_MONTH));
+        while (x.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) x.add(Calendar.DAY_OF_MONTH, -1);
+        return x.get(Calendar.DAY_OF_MONTH);
     }
 
     private static SharedPreferences prefs(Context ctx) {

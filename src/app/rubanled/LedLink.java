@@ -28,7 +28,8 @@ final class LedLink {
     }
 
     private static final String TAG = "rubanled";
-    private static final long RETRY_MS = 8000;
+    /** Reconnect quickly: the strip is powered with the car, a door opened right after must blink. */
+    private static final long RETRY_MS = 2500;
     private static final long WRITE_GAP_MS = 40;
     /** Only the newest commands matter (a blink makes many): drop the oldest beyond this. */
     private static final int MAX_QUEUE = 6;
@@ -52,7 +53,7 @@ final class LedLink {
     private BluetoothGattCharacteristic writeChar;
     /** With a response when FF01 allows it (0x0C on this strip): the strip acks each command. */
     private int writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE;
-    private boolean ready;
+    private volatile boolean ready;
     private boolean writing;
 
     LedLink(Context ctx, Listener listener) {
@@ -60,6 +61,9 @@ final class LedLink {
         this.listener = listener;
         thread.start();
         h = new Handler(thread.getLooper());
+        h.post(new Runnable() {
+            @Override public void run() { LedService.boost(); }
+        });
     }
 
     void start(final String addr) {
@@ -261,6 +265,8 @@ final class LedLink {
                     h.postDelayed(new Runnable() {
                         @Override public void run() {
                             if (g != gatt) return;
+                            // short connection interval: each command reaches the strip sooner
+                            try { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH); } catch (Throwable ignored) {}
                             state(true, "Ruban connecté");
                             queue.addFirst(new Cmd(Zengge.QUERY_STATE, Zengge.TYPE_QUERY));
                             pump();

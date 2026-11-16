@@ -7,6 +7,8 @@ SDK="${ANDROID_HOME:-$LOCALAPPDATA/Android/Sdk}"
 BT="$SDK/build-tools/36.0.0"
 JAR="$SDK/platforms/android-35/android.jar"
 JDK="${RUBAN_JDK:-/c/Program Files/Android/Android Studio/jbr}"
+# no Android Studio: the JDK 17 installed next to the SDK
+[ -x "$JDK/bin/javac" ] || [ -x "$JDK/bin/javac.exe" ] || JDK="$LOCALAPPDATA/Android/jdk17"
 OUT=build
 export JAVA_HOME="$JDK"; export PATH="$JDK/bin:$PATH"
 
@@ -27,7 +29,7 @@ with zipfile.ZipFile(sys.argv[1], 'a') as z:
     z.write(sys.argv[2], 'classes.dex')
 EOF
 "$BT/zipalign.exe" -f -p 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
-"$BT/apksigner.bat" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey \
+"$BT/apksigner.bat" sign --ks "${RUBAN_KS:-$HOME/.android/debug.keystore}" --ks-key-alias androiddebugkey \
     --ks-pass pass:android --out "$OUT/ruban-led.apk" "$OUT/aligned.apk"
 "$BT/apksigner.bat" verify "$OUT/ruban-led.apk"
 echo "built $OUT/ruban-led.apk"

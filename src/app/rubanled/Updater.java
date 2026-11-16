@@ -1,11 +1,14 @@
 package app.rubanled;
 
+import android.app.DownloadManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -14,6 +17,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -26,6 +31,11 @@ import java.security.MessageDigest;
  * {@code ruban-led.apk} matches the SHA-256 in {@code ruban-led.apk.sha256}. Installed through
  * Android's PackageInstaller, locked to this package, so Android shows its own confirm screen and
  * only accepts an APK signed with the same key. Runs only when the user taps the button.
+ *
+ * Downloads go through the app's own connection; when Android refuses it a socket ("socket
+ * failed: EPERM", seen on the A007 after the update that added the INTERNET permission), they go
+ * through Android's DownloadManager instead, which downloads on the app's behalf into its own
+ * external files folder (read, then deleted).
  */
 final class Updater {
     interface Listener {
@@ -42,6 +52,9 @@ final class Updater {
     private final Context ctx;
     private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
+    /** Set once the app's own socket was refused: every download then goes through Android's. */
+    private boolean viaSystem;
+    private static final long DM_TIMEOUT_MS = 180000;
 
     Updater(Context ctx, Listener listener) {
         this.ctx = ctx.getApplicationContext();
@@ -64,7 +77,9 @@ final class Updater {
                     check();
                 } catch (Throwable t) {
                     Log.w(LOG, "update failed", t);
-                    status("Mise à jour impossible : " + t.getMessage());
+                    status("Mise à jour impossible : " + t.getMessage()
+                        + (viaSystem ? " (même via le gestionnaire de téléchargements d'Android). "
+                            + "Désinstaller puis réinstaller l'app par ADB corrige un accès réseau refusé." : ""));
                 }
             }
         }, "updater").start();
@@ -73,7 +88,7 @@ final class Updater {
     private void check() throws Exception {
         int current = installedVersion(ctx);
         status("Recherche d'une mise à jour…");
-        JSONArray releases = new JSONArray(new String(get(RELEASES, 1 << 20), "UTF-8"));
+        JSONArray releases = new JSONArray(new String(fetch(RELEASES, "releases.json", 1 << 20), "UTF-8"));
         JSONObject best = null;
         int bestCode = current;
         for (int i = 0; i < releases.length(); i++) {
@@ -107,9 +122,9 @@ final class Updater {
             status("Release " + best.optString("tag_name") + " incomplète");
             return;
         }
-        String expected = new String(get(shaUrl, 1024), "UTF-8").trim().split("\\s+")[0].toLowerCase();
+        String expected = new String(fetch(shaUrl, SHA, 1024), "UTF-8").trim().split("\\s+")[0].toLowerCase();
         status("Téléchargement de la version " + bestCode + "…");
-        byte[] apk = get(apkUrl, 50 << 20);
+        byte[] apk = fetch(apkUrl, APK, 50 << 20);
         String actual = hex(MessageDigest.getInstance("SHA-256").digest(apk));
         if (!actual.equals(expected)) {
             status("Fichier téléchargé corrompu (SHA-256), mise à jour annulée");
@@ -150,6 +165,68 @@ final class Updater {
             } else if (status != PackageInstaller.STATUS_SUCCESS) {
                 Log.w(LOG, "install failed: " + i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE));
             }
+        }
+    }
+
+    /** The app's own connection first; Android's DownloadManager if the socket is refused. */
+    private byte[] fetch(String url, String name, int max) throws Exception {
+        if (!viaSystem) {
+            try {
+                return get(url, max);
+            } catch (java.net.SocketException | java.net.UnknownHostException | SecurityException e) {
+                Log.w(LOG, "own connection refused, using DownloadManager", e);
+                viaSystem = true;
+                status("Connexion de l'app refusée par Android : téléchargement via Android…");
+            }
+        }
+        return viaDownloadManager(url, name, max);
+    }
+
+    private byte[] viaDownloadManager(String url, String name, int max) throws Exception {
+        DownloadManager dm = (DownloadManager) ctx.getSystemService(Context.DOWNLOAD_SERVICE);
+        File dir = ctx.getExternalFilesDir("update");
+        if (dm == null || dir == null) throw new Exception("gestionnaire de téléchargements indisponible");
+        File file = new File(dir, name);
+        file.delete();
+        DownloadManager.Request r = new DownloadManager.Request(Uri.parse(url))
+            .setDestinationUri(Uri.fromFile(file))
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            .setVisibleInDownloadsUi(false)
+            .addRequestHeader("User-Agent", "ruban-led-updater")
+            .addRequestHeader("Accept", "application/vnd.github+json, application/octet-stream");
+        long id = dm.enqueue(r);
+        try {
+            long until = System.currentTimeMillis() + DM_TIMEOUT_MS;
+            while (true) {
+                Cursor c = dm.query(new DownloadManager.Query().setFilterById(id));
+                int st = -1, reason = 0;
+                try {
+                    if (c != null && c.moveToFirst()) {
+                        st = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS));
+                        reason = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON));
+                    }
+                } finally {
+                    if (c != null) c.close();
+                }
+                if (st == DownloadManager.STATUS_SUCCESSFUL) break;
+                if (st == DownloadManager.STATUS_FAILED || st == -1) throw new Exception("téléchargement Android en échec (" + reason + ")");
+                if (System.currentTimeMillis() > until) throw new Exception("téléchargement trop long");
+                Thread.sleep(400);
+            }
+            if (file.length() > max) throw new Exception("fichier trop gros");
+            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            InputStream in = new FileInputStream(file);
+            try {
+                byte[] b = new byte[16384];
+                int n;
+                while ((n = in.read(b)) > 0) buf.write(b, 0, n);
+            } finally {
+                in.close();
+            }
+            return buf.toByteArray();
+        } finally {
+            dm.remove(id);
+            file.delete();
         }
     }
 

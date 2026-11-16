@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
@@ -18,6 +19,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -41,15 +43,19 @@ public final class MainActivity extends Activity {
     private static final int WARN = 0xFFFFB300;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText;
+    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, mirrorLine, learnLine, eventsLine;
     private View linkDot;
-    private EditText address, blinkMs, blinkMax, nightStart, nightEnd, nightPct;
+    private LinearLayout choices;
+    private String[] shownChoices = new String[0];
+    private EditText address, blinkMs, blinkMax, repeat, nightWinter, nightSummer, nightEnd, nightPct;
+    private static boolean askedBattery;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
     private static final long COLOUR_THROTTLE_MS = 200;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         LedService.send(this, null);
+        askBatteryExemption();
         Settings s = Settings.load(this);
 
         LinearLayout page = new LinearLayout(this);
@@ -80,6 +86,25 @@ public final class MainActivity extends Activity {
         status.addView(stripLine);
         status.addView(doorsLine);
         status.addView(ruleLine);
+        mirrorLine = text("", 15, MUTED, false);
+        status.addView(mirrorLine);
+
+        LinearLayout mirrors = card(left, "Rétroviseurs");
+        mirrors.addView(text("Rétros dépliés : animation d'allumage ×3 puis couleur permanente. Rétros repliés : "
+            + "animation d'extinction ×3 puis ruban éteint, jauge de recharge masquée.", 14, MUTED, false));
+        mirrors.addView(text("Détection : rétros dépliés, touchez 1 ; repliez-les depuis l'écran de la Tesla, "
+            + "puis touchez 2 et choisissez la donnée qui a changé.", 14, MUTED, false));
+        LinearLayout mr = new LinearLayout(this);
+        mr.setPadding(0, dp(8), 0, 0);
+        mr.addView(action("1. Rétros dépliés", LedService.ACTION_LEARN_OPEN, true), weight(1, dp(8)));
+        mr.addView(action("2. Rétros repliés", LedService.ACTION_LEARN_FOLDED, true), weight(1, dp(8)));
+        mr.addView(action("Oublier", LedService.ACTION_MIRROR_FORGET, false), weight(0.6f, 0));
+        mirrors.addView(mr);
+        learnLine = text("", 15, WARN, false);
+        learnLine.setPadding(0, dp(8), 0, 0);
+        mirrors.addView(learnLine);
+        choices = column();
+        mirrors.addView(choices);
 
         LinearLayout colours = card(left, "Couleurs");
         colours.addView(new ColourPanel(LedService.TARGET_STEADY, "Permanente",
@@ -92,11 +117,17 @@ public final class MainActivity extends Activity {
         colours.addView(new ColourPanel(LedService.TARGET_ANIM, "Animations (entrée, clignotement, warnings)",
             s.blinkHue, s.blinkSat, s.blinkPct).view);
 
+        LinearLayout log = card(left, "Derniers événements");
+        eventsLine = text("", 14, MUTED, false);
+        eventsLine.setTypeface(Typeface.MONOSPACE);
+        log.addView(eventsLine);
+
         // ---- right: actions, rules, strip
         LinearLayout actions = card(right, "Actions");
         LinearLayout row1 = new LinearLayout(this), row2 = new LinearLayout(this);
-        row1.addView(action("Animation d'entrée", LedService.ACTION_INTRO, true), weight(1, dp(8)));
-        row1.addView(action("Test clignotement", LedService.ACTION_TEST_BLINK, true), weight(1, 0));
+        row1.addView(action("Allumage", LedService.ACTION_INTRO, true), weight(1, dp(8)));
+        row1.addView(action("Extinction", LedService.ACTION_EXIT, true), weight(1, dp(8)));
+        row1.addView(action("Clignotement", LedService.ACTION_TEST_BLINK, true), weight(1, 0));
         row2.addView(action("Allumer", LedService.ACTION_ON, false), weight(1, dp(8)));
         row2.addView(action("Éteindre", LedService.ACTION_OFF, false), weight(1, dp(8)));
         row2.addView(action("Couleur permanente", LedService.ACTION_DEFAULT, false), weight(1.4f, 0));
@@ -115,13 +146,16 @@ public final class MainActivity extends Activity {
             s.bootAndFrunk, new Toggle() { public void set(Settings x, boolean v) { x.bootAndFrunk = v; } });
         toggle(rules, "Clignoter avec les warnings", null,
             s.hazard, new Toggle() { public void set(Settings x, boolean v) { x.hazard = v; } });
-        toggle(rules, "Baisser la luminosité la nuit", null,
+        toggle(rules, "Mode nuit", "Hiver dès " + s.nightStartWinter + " h, été dès " + s.nightStartSummer
+                + " h, jusqu'à " + s.nightEnd + " h : tout à " + s.nightPct + " %",
             s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } });
         LinearLayout n1 = new LinearLayout(this), n2 = new LinearLayout(this);
         blinkMs = number(n1, "Clignotement (ms)", s.blinkMs);
         blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
-        nightStart = number(n2, "Nuit de (h)", s.nightStart);
-        nightEnd = number(n2, "à (h)", s.nightEnd);
+        repeat = number(n1, "Animations ×", s.animRepeat);
+        nightWinter = number(n2, "Nuit hiver (h)", s.nightStartWinter);
+        nightSummer = number(n2, "Nuit été (h)", s.nightStartSummer);
+        nightEnd = number(n2, "jusqu'à (h)", s.nightEnd);
         nightPct = number(n2, "Lum. nuit (%)", s.nightPct);
         rules.addView(n1);
         rules.addView(n2);
@@ -178,6 +212,32 @@ public final class MainActivity extends Activity {
             String rule = LedService.ruleText;
             ruleLine.setText(rule);
             ruleLine.setVisibility(rule.isEmpty() ? View.GONE : View.VISIBLE);
+            mirrorLine.setText(LedService.mirrorText);
+            String learn = LedService.learnText;
+            learnLine.setText(learn);
+            learnLine.setVisibility(learn.isEmpty() ? View.GONE : View.VISIBLE);
+            eventsLine.setText(LedService.eventsText.isEmpty() ? "—" : LedService.eventsText);
+            String[] c = LedService.learnChoices;
+            if (!java.util.Arrays.equals(c, shownChoices)) {
+                shownChoices = c;
+                choices.removeAllViews();
+                for (int i = 0; i < c.length; i++) {
+                    final int index = i;
+                    Button b = pill(c[i], i == 0);
+                    b.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            Intent pick = new Intent(MainActivity.this, LedService.class)
+                                .setAction(LedService.ACTION_LEARN_PICK).putExtra("index", index);
+                            if (Build.VERSION.SDK_INT >= 26) startForegroundService(pick);
+                            else startService(pick);
+                        }
+                    });
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    lp.topMargin = dp(6);
+                    choices.addView(b, lp);
+                }
+            }
             main.postDelayed(this, 1000);
         }
     };
@@ -190,7 +250,9 @@ public final class MainActivity extends Activity {
             s.address = address.getText().toString().trim().toUpperCase();
             s.blinkMs = clamp(num(blinkMs), 150, 5000);
             s.blinkMaxSec = clamp(num(blinkMax), 5, 3600);
-            s.nightStart = clamp(num(nightStart), 0, 23);
+            s.animRepeat = clamp(num(repeat), 1, 10);
+            s.nightStartWinter = clamp(num(nightWinter), 0, 23);
+            s.nightStartSummer = clamp(num(nightSummer), 0, 23);
             s.nightEnd = clamp(num(nightEnd), 0, 23);
             s.nightPct = clamp(num(nightPct), 1, 100);
             s.save(this);
@@ -214,6 +276,23 @@ public final class MainActivity extends Activity {
         }).run();
     }
 
+    /**
+     * Once per launch: Android's own prompt to leave the app out of battery optimisation, so the
+     * service keeps running (the unit's power saver also needs appPowerSaveConfig, see README).
+     */
+    private void askBatteryExemption() {
+        if (askedBattery) return;
+        askedBattery = true;
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                startActivity(new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:" + getPackageName())));
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private interface Toggle {
         void set(Settings s, boolean v);
     }
@@ -224,12 +303,9 @@ public final class MainActivity extends Activity {
         LinearLayout h = new LinearLayout(this);
         h.setGravity(Gravity.CENTER_VERTICAL);
         h.setPadding(dp(4), 0, 0, dp(12));
-        View bar = new View(this);
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(ACCENT);
-        g.setCornerRadius(dp(3));
-        bar.setBackground(g);
-        h.addView(bar, new LinearLayout.LayoutParams(dp(6), dp(30)));
+        ImageView icon = new ImageView(this);
+        icon.setImageDrawable(getDrawable(R.mipmap.ic_launcher));
+        h.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
         TextView t = text("Ruban LED", 26, TEXT, true);
         t.setPadding(dp(12), 0, 0, 0);
         h.addView(t);
