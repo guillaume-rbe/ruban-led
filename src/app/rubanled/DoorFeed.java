@@ -21,13 +21,16 @@ import android.util.Log;
  *
  * Code 15, key "doorval": 0x80 driver, 0x40 passenger, 0x20 rear right, 0x10 rear left,
  * 0x08 boot, 0x04 frunk. Code 9, keys "leftlight" / "rightlight": the indicators, 1 = lit,
- * 2 = off; they follow the actual flashing (docs/FIELD_MAP.md in Binnacle).
+ * 2 = off; they follow the actual flashing; "chargelight" = charging. Code 11: "jhmail" and
+ * "batterylevel" for the battery % ({@link Battery}). (docs/FIELD_MAP.md in Binnacle.)
  */
 final class DoorFeed {
     interface Listener {
         void onDoors(int doorval);
         /** Indicator lamps as last reported (each message may carry only some keys). */
         void onIndicators(boolean left, boolean right);
+        /** Battery % (-1 unknown) and whether the car is charging (code 9 "chargelight"). */
+        void onBattery(int percent, boolean charging);
         void onFeedState(String text);
     }
 
@@ -36,7 +39,7 @@ final class DoorFeed {
     private static final String SVC_ACTION = "com.xbs.canapp.action.mcuservice";
     private static final String SVC_PKG = "com.xbs.canapp";
     private static final int TX_REGISTER = 1, TX_UNREGISTER = 2;
-    private static final int CODE_DOORS = 15, CODE_LIGHTS = 9;
+    private static final int CODE_DOORS = 15, CODE_LIGHTS = 9, CODE_BATTERY = 11;
     private static final long RETRY_MS = 5000;
 
     private final Context ctx;
@@ -49,7 +52,9 @@ final class DoorFeed {
     private volatile boolean running;
     private volatile IBinder binder;
     private boolean registered;
-    private boolean left, right;
+    private boolean left, right, charging;
+    private int percent = -1, jhmail = -1, batterylevel = -1;
+    private final Battery battery = new Battery();
 
     DoorFeed(Context ctx, Listener listener) {
         this.ctx = ctx.getApplicationContext();
@@ -65,6 +70,18 @@ final class DoorFeed {
                         left = lit(b, "leftlight", left);
                         right = lit(b, "rightlight", right);
                         DoorFeed.this.listener.onIndicators(left, right);
+                        if (b.containsKey("chargelight")) {
+                            charging = lit(b, "chargelight", charging);
+                            DoorFeed.this.listener.onBattery(percent, charging);
+                        }
+                        return;
+                    }
+                    if (msg.what == CODE_BATTERY) {
+                        jhmail = num(b, "jhmail", jhmail);
+                        batterylevel = num(b, "batterylevel", batterylevel);
+                        int p = battery.percent(jhmail, batterylevel, android.os.SystemClock.elapsedRealtime());
+                        if (p >= 0) percent = p;
+                        DoorFeed.this.listener.onBattery(percent, charging);
                         return;
                     }
                     if (msg.what != CODE_DOORS) return;
@@ -79,6 +96,16 @@ final class DoorFeed {
                 }
             }
         });
+    }
+
+    private static int num(Bundle b, String k, int def) {
+        if (!b.containsKey(k)) return def;
+        Object o = b.get(k);
+        if (o instanceof Number) return ((Number) o).intValue();
+        if (o instanceof String) {
+            try { return Math.round(Float.parseFloat(((String) o).trim())); } catch (NumberFormatException e) { return def; }
+        }
+        return def;
     }
 
     private static boolean lit(Bundle b, String k, boolean def) {
@@ -175,7 +202,7 @@ final class DoorFeed {
             d.writeInterfaceToken(DESCRIPTOR);
             d.writeInt(1);
             messenger.writeToParcel(d, 0);
-            d.writeIntArray(new int[] {CODE_DOORS, CODE_LIGHTS});
+            d.writeIntArray(new int[] {CODE_DOORS, CODE_LIGHTS, CODE_BATTERY});
             Parcel r = call(TX_REGISTER, d);
             registered = r != null && r.readInt() != 0;
             if (r != null) r.recycle();

@@ -70,6 +70,22 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private long lastBothLitMs;
     /** Indicators flash about every 0.7 s: no "both lit" for this long means the hazards are off. */
     private static final long HAZARD_OFF_MS = 2500;
+
+    /** Charging: the strip is a green gauge of the battery % (owner, 16 Nov). */
+    private boolean charging;
+    private int soc = -1;
+    private boolean gauge;
+    private boolean gaugeTip;
+    private static final int GAUGE_HUE = 120;
+    private static final long GAUGE_TICK_MS = 800;
+
+    /** Exit animation when the dash goes to sleep: the light withdraws, then the strip is off. */
+    private boolean screenIsOn = true;
+    private boolean exiting;
+    private int exitFrame;
+    private int exitHue, exitSat, exitPct;
+    private static final int EXIT_FRAMES = 22;
+    private static final long EXIT_FRAME_MS = 150;
     private Boolean lastNight;
     private boolean brightnessPending;
     private boolean intro;
@@ -113,12 +129,20 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             introPending = true;
             if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
                 // the dash sleeps with the car: the strip (glovebox USB, powered while the car is
-                // awake, Sentry included) goes dark, and stays dark until a door is opened
-                stopBlinkNoRestore();
+                // awake, Sentry included) withdraws and goes dark until a door is opened, unless
+                // the car is charging (the gauge stays)
+                screenIsOn = false;
                 main.removeCallbacks(previewEnd);
                 main.removeCallbacks(introFinal);
-                power(false);
-                ruleText = "Écran éteint : ruban éteint";
+                if (charging) showGauge();
+                else playExit();
+            } else {
+                screenIsOn = true;
+                if (exiting) {
+                    exiting = false;
+                    main.removeCallbacks(exitTick);
+                    power(false);
+                }
             }
         }
     };
@@ -253,6 +277,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (!link.isReady()) return;
         introPending = false;
         introWantedMs = 0;
+        gauge = false;
+        main.removeCallbacks(gaugeTick);
+        exiting = false;
+        main.removeCallbacks(exitTick);
         blinking = false;
         saved = null;
         main.removeCallbacks(blinkTick);
@@ -273,6 +301,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             if (introFrame >= INTRO_FRAMES) {
                 intro = false;
                 ruleText = "";
+                if (charging) { showGauge(); return; }
                 colour(settings.defaultHue, settings.defaultSat, targetPct(), true);   // then the steady one
                 // a second time: if a frame was lost, the strip must not stay half lit
                 main.postDelayed(introFinal, 700);
@@ -301,6 +330,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     };
 
     private void startBlink(long maxSec) {
+        gauge = false;
+        main.removeCallbacks(gaugeTick);
+        exiting = false;
+        main.removeCallbacks(exitTick);
         intro = false;
         main.removeCallbacks(introFinal);
         main.removeCallbacks(introTick);
@@ -337,6 +370,16 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         link.clearQueue();
         Zengge.State s = saved;
         saved = null;
+        if (charging) {
+            ruleText = "";
+            showGauge();
+            return;
+        }
+        if (!screenIsOn) {
+            ruleText = "";
+            power(false);
+            return;
+        }
         if (s != null && s.hasColour && s.on) {
             colour(s.hue, s.sat, s.val, true);   // already on from the blink
         } else if (s != null && s.hasColour) {
@@ -353,6 +396,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     }
 
     private void stopBlinkNoRestore() {
+        gauge = false;
+        main.removeCallbacks(gaugeTick);
+        exiting = false;
+        main.removeCallbacks(exitTick);
         hazardOn = false;
         main.removeCallbacks(hazardCheck);
         intro = false;
@@ -414,7 +461,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** At a night/day change: same colour, brightness of the hour (once; manual changes stay). */
     private void applyBrightness() {
-        if (!brightnessPending || !link.isReady()) return;
+        if (!brightnessPending || !link.isReady() || gauge || exiting) return;
         int pct = targetPct();
         if (blinking) {
             if (saved != null && saved.hasColour) saved.val = pct;
@@ -441,6 +488,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                     linkLostMs = 0;
                     if (introWantedMs != 0 && now - introWantedMs < INTRO_WANTED_MS && doorsOpen) playIntro();
                     introWantedMs = 0;
+                    if (charging && !gauge && !blinking && !intro) showGauge();
                     applyBrightness();
                 } else if (linkLostMs == 0) {
                     linkLostMs = now;
@@ -495,6 +543,89 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             } else {
                 stopBlink();
             }
+        }
+    };
+
+    @Override public void onBattery(int percent, boolean chg) {
+        if (percent >= 0) soc = percent;
+        if (chg == charging) return;
+        charging = chg;
+        if (charging) {
+            showGauge();
+        } else if (gauge) {
+            gauge = false;
+            main.removeCallbacks(gaugeTick);
+            ruleText = "";
+            if (screenIsOn) colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
+            else playExit();
+        }
+    }
+
+    /** Green gauge of the battery % while charging, its tip pulsing (unless something else runs). */
+    private void showGauge() {
+        if (blinking || intro || !link.isReady()) return;
+        exiting = false;
+        main.removeCallbacks(exitTick);
+        if (!gauge) power(true);
+        gauge = true;
+        ruleText = "Recharge : jauge de batterie";
+        main.removeCallbacks(gaugeTick);
+        main.post(gaugeTick);
+    }
+
+    private final Runnable gaugeTick = new Runnable() {
+        @Override public void run() {
+            if (!gauge) return;
+            gaugeTip = !gaugeTip;
+            int pct = targetPct();
+            // segment 1 is at the right end of the dashboard (and the back of the doors)
+            int lit = soc < 0 ? VISIBLE_SEGMENTS : Math.max(1, Math.round(soc * VISIBLE_SEGMENTS / 100f));
+            int[] vals = new int[Zengge.SEGMENTS];
+            for (int i = 0; i < VISIBLE_SEGMENTS && i < lit; i++) vals[i] = pct;
+            if (lit < VISIBLE_SEGMENTS || soc < 100) vals[lit - 1] = gaugeTip ? pct : Math.max(1, pct / 4);
+            link.send(Zengge.levels(GAUGE_HUE, 100, vals));
+            lastSentMs = SystemClock.elapsedRealtime();
+            main.postDelayed(this, GAUGE_TICK_MS);
+        }
+    };
+
+    /** Exit: the light withdraws in the reverse order of the entrance, then the strip is off. */
+    private void playExit() {
+        stopBlinkNoRestore();
+        if (!link.isReady() || strip == null || !strip.on) {
+            power(false);
+            ruleText = "Écran éteint : ruban éteint";
+            return;
+        }
+        exitHue = strip.hasColour ? strip.hue : settings.defaultHue;
+        exitSat = strip.hasColour ? strip.sat : settings.defaultSat;
+        exitPct = strip.hasColour ? strip.val : targetPct();
+        exiting = true;
+        exitFrame = 0;
+        ruleText = "Animation de sortie";
+        main.post(exitTick);
+    }
+
+    private final Runnable exitTick = new Runnable() {
+        @Override public void run() {
+            if (!exiting) return;
+            if (exitFrame >= EXIT_FRAMES) {
+                exiting = false;
+                power(false);
+                ruleText = "Écran éteint : ruban éteint";
+                return;
+            }
+            double t = exitFrame * (0.9 + INTRO_FADE) / (EXIT_FRAMES - 1);
+            int[] vals = new int[Zengge.SEGMENTS];
+            for (int i = 0; i < vals.length; i++) {
+                double start = i < VISIBLE_SEGMENTS ? 0.9 - introStart(i) : 0;   // last lit, first out
+                double f = (t - start) / INTRO_FADE;
+                vals[i] = f <= 0 ? exitPct : f >= 1 ? 0 : (int) Math.round(exitPct * (1 - f));
+            }
+            link.send(Zengge.levels(exitHue, exitSat, vals));
+            lastSentMs = SystemClock.elapsedRealtime();
+            exitFrame++;
+            main.postDelayed(this, EXIT_FRAME_MS);
         }
     };
 

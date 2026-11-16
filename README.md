@@ -17,7 +17,11 @@ Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprè
   (couleur des animations, 100 % ↔ 1 %, 400 ms, 2 min max), puis le remet comme avant.
 - **Warnings** : tant que les feux de détresse sont allumés (les deux clignotants allumés en même
   temps dans le flux CAN, code 9), le ruban clignote dans la couleur des animations.
-- **Veille** : quand l'écran s'éteint (voiture endormie), le ruban s'éteint. Utile car il est
+- **Recharge** : pendant la charge (code 9 `chargelight`), le ruban devient une jauge verte du
+  pourcentage de batterie (code 11, décodé comme Binnacle), remplie depuis la droite du tableau de
+  bord, son extrémité pulsant. Elle reste affichée écran éteint tant que la voiture charge.
+- **Veille** : quand l'écran s'éteint (voiture endormie), la lumière se retire progressivement
+  (ordre inverse de l'entrée, ~3 s), puis le ruban s'éteint. Utile car il est
   alimenté par l'USB de la boîte à gants, qui reste alimenté tant que la voiture est éveillée
   (Sentinelle comprise).
 - **Deux couleurs** réglables dans l'app, chacune avec sa roue et sa jauge de luminosité :
