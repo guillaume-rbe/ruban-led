@@ -26,7 +26,7 @@ import java.net.URL;
 import java.security.MessageDigest;
 
 /**
- * Updates from the GitHub releases of the owner's fork: the newest release tagged
+ * Updates from the GitHub releases of guillaume-rbe/ruban-led: the newest release tagged
  * {@code ruban-led-v<versionCode>} with a higher versionCode than this one, whose
  * {@code ruban-led.apk} matches the SHA-256 in {@code ruban-led.apk.sha256}. Installed through
  * Android's PackageInstaller, locked to this package, so Android shows its own confirm screen and
@@ -42,7 +42,7 @@ final class Updater {
         void onUpdateStatus(String text);
     }
 
-    static final String REPO = "guillaume-rbe/binnacle";
+    static final String REPO = "guillaume-rbe/ruban-led";
     private static final String RELEASES = "https://api.github.com/repos/" + REPO + "/releases?per_page=30";
     private static final String TAG_PREFIX = "ruban-led-v";
     private static final String APK = "ruban-led.apk";

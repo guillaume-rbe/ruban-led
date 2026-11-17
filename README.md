@@ -1,11 +1,21 @@
 # Ruban LED
 
-Petite app Android pour l'écran ZIQI A007 (Tesla Model 3/Y) qui pilote en Bluetooth LE un ruban LED
-Zengge (app « ZENGGE », `com.zengge.blev2`) selon l'état des portes de la voiture.
+Petite app Android pour l'écran d'instruments Android 10,25" des Tesla Model 3/Y (ODM ZIQI « A007 »,
+vendu sous les noms Carview, Tesery…) qui pilote en Bluetooth LE un ruban LED d'ambiance Zengge
+(app « ZENGGE », `com.zengge.blev2`) selon la voiture : verrouillage, portes, warnings, recharge.
 
-Séparée de Binnacle : elle ne lit que les portes, les feux et la batterie, **en lecture seule**, auprès
-de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules transactions `regPropIdList`/`unregPropIdList`, comme le
-`CanFeed` de Binnacle). Rien n'est envoyé à la voiture ni au MCU.
+Elle tourne à côté de [Binnacle](https://github.com/lotech/binnacle) (tableau de bord de remplacement
+pour cet écran) mais n'en dépend pas : elle lit elle-même les portes, les feux et la batterie,
+**en lecture seule**, auprès de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules
+transactions `regPropIdList`/`unregPropIdList`, comme le `CanFeed` de Binnacle). Rien n'est envoyé à
+la voiture ni au MCU.
+
+![Écran de l'app (bas) : couleur, événements, ruban et mise à jour](docs/captures/ecran-app.png)
+
+Documentation :
+- [docs/DONNEES-CAN.md](docs/DONNEES-CAN.md) : les champs lus, le relevé du verrouillage, ce qui
+  n'est pas dans le flux (rétroviseurs) ;
+- [PROTOCOLE.md](PROTOCOLE.md) : le protocole Bluetooth du ruban Zengge.
 
 ## Ce qu'elle fait
 
@@ -49,7 +59,8 @@ de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules transactions
 
 Abandonnés en 0.7 : l'app CAN d'origine ne publie pas leur état (enregistrement de tous les codes
 0–127 avec le logger de Binnacle le 17 nov., rétros repliés puis dépliés plusieurs fois : aucun champ
-n'a changé). Le verrouillage, lu sur les clignotants, les remplace.
+n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails dans
+[docs/DONNEES-CAN.md](docs/DONNEES-CAN.md).
 
 ## Priorité et réactivité
 
@@ -98,7 +109,7 @@ sinon Android refuse la mise à jour.
 
 ## Mises à jour depuis l'app
 
-Le bouton « Mise à jour » cherche dans les releases de `guillaume-rbe/binnacle` la plus récente
+Le bouton « Mise à jour » cherche dans les releases de ce dépôt (`guillaume-rbe/ruban-led`) la plus récente
 taguée `ruban-led-v<versionCode>`, plus récente que la version installée. Il télécharge
 `ruban-led.apk`, vérifie son SHA-256 (`ruban-led.apk.sha256`), puis l'installe avec
 l'installateur d'Android, verrouillé sur ce paquet : Android affiche sa propre confirmation et
@@ -108,8 +119,22 @@ applis inconnues » pour Ruban LED (l'app ouvre l'écran d'Android).
 Si Android refuse la connexion de l'app (« socket failed: EPERM », vu sur l'A007 quand la
 permission Internet est arrivée par une mise à jour : Android la donne mais le processus ne l'a
 pas), l'app passe par le gestionnaire de téléchargements d'Android, qui télécharge à sa place.
-Si cela échoue aussi : `adb uninstall app.rubanled` puis `adb install ruban-led.apk` (les réglages
-sont à refaire).
+Redémarrer l'écran une fois corrige cet accès refusé.
 
-Publier une version : augmenter `android:versionCode` dans `AndroidManifest.xml`, pousser la
-branche `ruban-led`, puis `bash release.sh` (crée la release avec `gh`, sans la marquer « latest »).
+Jusqu'à la 0.10, l'app était développée sur la branche `ruban-led` du fork
+[guillaume-rbe/binnacle](https://github.com/guillaume-rbe/binnacle/tree/ruban-led) et cherchait ses
+mises à jour là-bas. La 0.11 y est aussi publiée pour faire le passage ; les versions suivantes ne
+sont publiées qu'ici.
+
+L'avertissement de Google Play Protect (« application non sûre ») à chaque mise à jour vient de ce
+que l'app n'est pas sur le Play Store : « Installer quand même », ou couper l'analyse de Play Protect
+dans le Play Store.
+
+Publier une version : augmenter `android:versionCode` dans `AndroidManifest.xml`, pousser `main`,
+puis `bash release.sh` (crée la release avec `gh` et la marque « latest »).
+
+## Licence et crédits
+
+GPL-3.0 (voir [LICENSE](LICENSE)), comme Binnacle, dont viennent la façon de lire l'app CAN en
+lecture seule et la table de décodage de la batterie (`Battery.java`). Merci à lotech et aux
+contributeurs de Binnacle.
