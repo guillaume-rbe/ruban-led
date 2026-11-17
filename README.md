@@ -16,14 +16,19 @@ la voiture ni au MCU.
 
 ![État, présence et actions](docs/captures/1-etat-actions.png)
 
-Couleur permanente (ambiante) et couleur d'alerte, chacune avec sa roue et sa luminosité ; règles :
+Couleurs verrouillées par défaut (un bouton les débloque, pour qu'un doigt qui fait défiler la page
+ne change pas une couleur) ; règles :
 
-![Couleurs et règles](docs/captures/2-couleurs-regles.png)
+![Couleurs verrouillées et règles](docs/captures/2-couleurs-verrouillees-regles.png)
 
-Derniers événements (ici une porte ouverte alors que l'app croyait la voiture verrouillée : elle
-compte comme l'arrivée), adresse du ruban et mise à jour :
+Les deux roues grisées tant qu'elles sont verrouillées (couleur permanente, couleur d'alerte rouge) ;
+option « Musique à la connexion CarPlay » et son état :
 
-![Événements et mise à jour](docs/captures/3-evenements-mise-a-jour.png)
+![Roues verrouillées et musique à la connexion CarPlay](docs/captures/3-couleurs-musique-carplay.png)
+
+Derniers événements, adresse du ruban et mise à jour :
+
+![Événements et mise à jour](docs/captures/4-evenements-mise-a-jour.png)
 
 Documentation :
 - [docs/DONNEES-CAN.md](docs/DONNEES-CAN.md) : les champs lus, le relevé du verrouillage, ce qui
