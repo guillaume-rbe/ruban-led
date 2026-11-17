@@ -151,6 +151,14 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private static final int INTRO_FRAMES = 28;
 
 
+    /** Exit rounds 2 and 3: a band this wide (in the 0..0.9 sweep) runs from dark to dark. */
+    private static final double BAND_WIDTH = 0.25;
+    private static final int BAND_FRAMES = 28;
+
+    private static double clamp01(double x) {
+        return x < 0 ? 0 : x > 1 ? 1 : x;
+    }
+
     private static double introStart(int i) {
         if (i < DOOR_SEGMENTS) return (double) i / DOOR_SEGMENTS;                          // 0 .. 0.9
         return (double) (VISIBLE_SEGMENTS - 1 - i) / (VISIBLE_SEGMENTS - DOOR_SEGMENTS);   // 0.8 .. 0
@@ -768,10 +776,17 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable exitTick = new Runnable() {
         @Override public void run() {
             if (!exiting) return;
-            if (exitFrame >= EXIT_FRAMES) {
+            // round 1 withdraws the lit strip; rounds 2 and 3 start dark and send a band of light
+            // the same way, so the strip stays dark between rounds (owner, 17 Nov: lighting it
+            // all up again for the next round looked bad)
+            boolean band = exitRound > 0;
+            int frames = band ? BAND_FRAMES : EXIT_FRAMES;
+            if (exitFrame >= frames) {
                 exitRound++;
                 if (exitRound < repeats()) {
-                    exitFrame = 0;    // the next round starts fully lit
+                    exitFrame = 0;    // the next round starts dark
+                    link.send(Zengge.levels(exitHue, exitSat, new int[Zengge.SEGMENTS]));
+                    lastSentMs = SystemClock.elapsedRealtime();
                     main.postDelayed(this, ROUND_GAP_MS);
                     return;
                 }
@@ -780,12 +795,15 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 ruleText = "Ruban éteint";
                 return;
             }
-            double t = exitFrame * (0.9 + INTRO_FADE) / (EXIT_FRAMES - 1);
+            double span = 0.9 + INTRO_FADE + (band ? BAND_WIDTH : 0);
+            double t = exitFrame * span / (frames - 1);
             int[] vals = new int[Zengge.SEGMENTS];
             for (int i = 0; i < vals.length; i++) {
+                if (band && i >= VISIBLE_SEGMENTS) continue;                        // not shown: dark
                 double start = i < VISIBLE_SEGMENTS ? 0.9 - introStart(i) : 0;   // last lit, first out
-                double f = (t - start) / INTRO_FADE;
-                vals[i] = f <= 0 ? exitPct : f >= 1 ? 0 : (int) Math.round(exitPct * (1 - f));
+                double off = clamp01((t - start - (band ? BAND_WIDTH : 0)) / INTRO_FADE);
+                double on = band ? clamp01((t - start) / INTRO_FADE) : 1;
+                vals[i] = (int) Math.round(exitPct * Math.max(0, on - off));
             }
             link.send(Zengge.levels(exitHue, exitSat, vals));
             lastSentMs = SystemClock.elapsedRealtime();
