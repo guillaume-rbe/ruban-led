@@ -61,6 +61,13 @@ Documentation :
   (en général il l'est déjà depuis le verrouillage). Utile car il est alimenté par
   l'USB de la boîte à gants, qui reste alimenté tant que la voiture est éveillée (Sentinelle
   comprise).
+- **Musique à la connexion CarPlay** (option, activée par défaut) : quand l'iPhone se connecte à
+  l'app CarPlay de l'écran (`com.shilapi.xcertplay`), si rien ne joue 3 s plus tard, l'app envoie
+  « lecture » à la session média de CarPlay (jusqu'à 3 essais) : l'iPhone relance sa dernière appli
+  audio (YouTube Music…). La connexion se lit sur les commandes de cette session (128 sans iPhone,
+  692 / 690 avec). Il faut donner une fois à Ruban LED l'**accès aux notifications** d'Android
+  (bouton dans la carte « Règles ») : c'est ce qui permet de voir la session média d'une autre app ;
+  aucune notification n'est lue. Validé le 17 nov. ; remplace une automatisation iOS peu fiable.
 - **Mode nuit**, activé par défaut : de 19 h (heure d'hiver) ou 21 h (heure d'été) à 7 h, tout le
   ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables.
 - **Deux couleurs** réglables dans l'app, chacune avec sa roue et sa jauge de luminosité :

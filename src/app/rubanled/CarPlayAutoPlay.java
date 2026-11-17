@@ -74,6 +74,9 @@ final class CarPlayAutoPlay {
         }
         if (!hasAccess(ctx)) {
             text = "Lecture auto CarPlay : autoriser l'accès aux notifications pour Ruban LED";
+            // granted later in Android's screen: picked up within ACCESS_RETRY_MS (17 Nov: the
+            // listener's own callback didn't reach the service)
+            handler.postDelayed(retryAccess, ACCESS_RETRY_MS);
             return;
         }
         try {
@@ -87,8 +90,17 @@ final class CarPlayAutoPlay {
         }
     }
 
+    private static final long ACCESS_RETRY_MS = 15000;
+
+    private final Runnable retryAccess = new Runnable() {
+        @Override public void run() {
+            if (enabled && manager == null) setEnabled(true);
+        }
+    };
+
     void stop() {
         handler.removeCallbacks(check);
+        handler.removeCallbacks(retryAccess);
         if (manager != null) {
             try { manager.removeOnActiveSessionsChangedListener(sessions); } catch (Throwable ignored) {}
             manager = null;
