@@ -237,10 +237,19 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         screen.addAction(Intent.ACTION_SCREEN_OFF);
         registerReceiver(screenOn, screen, null, main);
         watchdog();
+        autoPlay = new CarPlayAutoPlay(this, main, new CarPlayAutoPlay.Events() {
+            @Override public void event(String what) { LedService.this.event(what); }
+        });
         main.post(new Runnable() {
-            @Override public void run() { event("Service démarré"); }
+            @Override public void run() {
+                event("Service démarré");
+                autoPlay.setEnabled(settings.autoPlay);
+            }
         });
     }
+
+    /** Music on when CarPlay connects (owner, 17 Nov). */
+    private CarPlayAutoPlay autoPlay;
 
     /** Restarts the service if Android or the unit's power saver stopped it. */
     private void watchdog() {
@@ -266,6 +275,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (ACTION_RELOAD.equals(a)) {
             settings = Settings.load(this);
             link.start(settings.address);
+            autoPlay.setEnabled(settings.autoPlay);
             lastNight = null;          // re-apply the brightness rule with the new hours
             main.removeCallbacks(nightCheck);
             main.post(nightCheck);
@@ -307,6 +317,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     @Override public void onDestroy() {
         main.removeCallbacksAndMessages(null);
         try { unregisterReceiver(screenOn); } catch (Throwable ignored) {}
+        autoPlay.stop();
         doors.stop();
         link.quit();
         if (wake.isHeld()) wake.release();

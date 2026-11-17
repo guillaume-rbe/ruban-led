@@ -43,7 +43,8 @@ public final class MainActivity extends Activity {
     private static final int WARN = 0xFFFFB300;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine;
+    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine, autoPlayLine;
+    private Button autoPlayAccess;
     private View linkDot;
     private EditText address, blinkMs, blinkMax, repeat, nightWinter, nightSummer, nightEnd, nightPct;
     private static boolean askedBattery;
@@ -130,6 +131,21 @@ public final class MainActivity extends Activity {
             s.bootAndFrunk, new Toggle() { public void set(Settings x, boolean v) { x.bootAndFrunk = v; } });
         toggle(rules, "Clignoter avec les warnings", null,
             s.hazard, new Toggle() { public void set(Settings x, boolean v) { x.hazard = v; } });
+        toggle(rules, "Musique à la connexion CarPlay",
+            "Relance la dernière appli audio de l'iPhone (YouTube Music…) si rien ne joue 3 s après la connexion",
+            s.autoPlay, new Toggle() { public void set(Settings x, boolean v) { x.autoPlay = v; } });
+        autoPlayLine = text("", 13, MUTED, false);
+        rules.addView(autoPlayLine);
+        // seeing the CarPlay app's media session needs notification access (Android's own screen)
+        autoPlayAccess = pill("Autoriser l'accès (notifications)", false);
+        autoPlayAccess.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+                Toast.makeText(MainActivity.this, "Activer Ruban LED dans la liste (aucune notification n'est lue)",
+                    Toast.LENGTH_LONG).show();
+            }
+        });
+        rules.addView(autoPlayAccess);
         toggle(rules, "Mode nuit", "Hiver dès " + s.nightStartWinter + " h, été dès " + s.nightStartSummer
                 + " h, jusqu'à " + s.nightEnd + " h : tout à " + s.nightPct + " %",
             s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } });
@@ -198,6 +214,8 @@ public final class MainActivity extends Activity {
             ruleLine.setVisibility(rule.isEmpty() ? View.GONE : View.VISIBLE);
             presenceLine.setText(LedService.presenceText);
             eventsLine.setText(LedService.eventsText.isEmpty() ? "—" : LedService.eventsText);
+            autoPlayLine.setText(CarPlayAutoPlay.text);
+            autoPlayAccess.setVisibility(CarPlayAutoPlay.hasAccess(MainActivity.this) ? View.GONE : View.VISIBLE);
             main.postDelayed(this, 1000);
         }
     };

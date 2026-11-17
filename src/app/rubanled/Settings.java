@@ -15,6 +15,8 @@ final class Settings {
     boolean doorBlink;
     boolean bootAndFrunk;
     boolean hazard;
+    /** Music on when CarPlay connects (CarPlayAutoPlay; owner, 17 Nov). */
+    boolean autoPlay;
     int defaultHue;
     int defaultSat;
     int blinkHue;
@@ -44,6 +46,7 @@ final class Settings {
         s.doorBlink = p.getBoolean("doorBlink", true);
         s.bootAndFrunk = p.getBoolean("bootAndFrunk", true);
         s.hazard = p.getBoolean("hazard", true);
+        s.autoPlay = p.getBoolean("autoPlay", true);
         s.defaultHue = p.getInt("defaultHue", 0);
         s.defaultSat = p.getInt("defaultSat", 100);
         s.blinkHue = p.getInt("blinkHue", 0);
@@ -69,6 +72,7 @@ final class Settings {
             .putBoolean("doorBlink", doorBlink)
             .putBoolean("bootAndFrunk", bootAndFrunk)
             .putBoolean("hazard", hazard)
+            .putBoolean("autoPlay", autoPlay)
             .putInt("defaultHue", defaultHue)
             .putInt("defaultSat", defaultSat)
             .putInt("blinkHue", blinkHue)
