@@ -10,7 +10,20 @@ pour cet écran) mais n'en dépend pas : elle lit elle-même les portes, les feu
 transactions `regPropIdList`/`unregPropIdList`, comme le `CanFeed` de Binnacle). Rien n'est envoyé à
 la voiture ni au MCU.
 
-![Écran de l'app (bas) : couleur, événements, ruban et mise à jour](docs/captures/ecran-app.png)
+## Captures (écran 1920×720 de l'A007)
+
+État du ruban et de la voiture, présence (verrouillage) et actions de test :
+
+![État, présence et actions](docs/captures/1-etat-actions.png)
+
+Couleur permanente (ambiante) et couleur d'alerte, chacune avec sa roue et sa luminosité ; règles :
+
+![Couleurs et règles](docs/captures/2-couleurs-regles.png)
+
+Derniers événements (ici une porte ouverte alors que l'app croyait la voiture verrouillée : elle
+compte comme l'arrivée), adresse du ruban et mise à jour :
+
+![Événements et mise à jour](docs/captures/3-evenements-mise-a-jour.png)
 
 Documentation :
 - [docs/DONNEES-CAN.md](docs/DONNEES-CAN.md) : les champs lus, le relevé du verrouillage, ce qui
