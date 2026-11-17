@@ -114,7 +114,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
         sp.setMargins(0, dp(14), 0, dp(14));
         colours.addView(sep, sp);
-        colours.addView(new ColourPanel(LedService.TARGET_ANIM, "Animations (entrée, clignotement, warnings)",
+        colours.addView(new ColourPanel(LedService.TARGET_ANIM, "Alertes (portes, coffre, frunk, warnings)",
             s.blinkHue, s.blinkSat, s.blinkPct).view);
 
         LinearLayout log = card(left, "Derniers événements");

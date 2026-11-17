@@ -16,14 +16,14 @@ Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprè
   pour ne pas gaspiller d'énergie. Rétros dépliés, une porte qui s'ouvre fait clignoter le ruban.
 - **Animation d'entrée** (sans rétroviseurs configurés) : à la première porte ouverte après le réveil de la voiture (écran rallumé,
   ruban rebranché après plus d'une minute, démarrage de l'app), le ruban se remplit progressivement
-  (~5 s, **3 fois**) dans la couleur des animations, puis passe à la couleur permanente. Les portes se remplissent de l'arrière vers l'avant ; le tableau de
+  (~5 s, **3 fois**) dans la couleur permanente (ambiante), puis reste dessus. Les portes se remplissent de l'arrière vers l'avant ; le tableau de
   bord part des deux bouts.
 - **Clignotement** : ensuite, chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
-  ouverte) fait clignoter le ruban (couleur des animations, 100 % ↔ 1 %, 400 ms, 2 min max).
+  ouverte) fait clignoter le ruban (couleur d'alerte, rouge par défaut, 100 % ↔ 1 %, 400 ms, 2 min max).
 - **Après chaque animation** : toujours la couleur permanente (la jauge pendant la recharge), ou
   ruban éteint si les rétros sont repliés.
 - **Warnings** : tant que les feux de détresse sont allumés (les deux clignotants allumés en même
-  temps dans le flux CAN, code 9), le ruban clignote dans la couleur des animations.
+  temps dans le flux CAN, code 9), le ruban clignote dans la couleur d'alerte.
 - **Recharge** : pendant la charge (code 9 `chargelight`), et seulement rétros dépliés, le ruban
   devient une jauge verte du pourcentage de batterie (code 11, décodé comme Binnacle), remplie
   depuis la droite du tableau de bord, son extrémité pulsant.
@@ -34,7 +34,7 @@ Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprè
 - **Mode nuit**, activé par défaut : de 19 h (heure d'hiver) ou 21 h (heure d'été) à 7 h, tout le
   ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables.
 - **Deux couleurs** réglables dans l'app, chacune avec sa roue et sa jauge de luminosité :
-  couleur permanente, et couleur des animations (rouge 100 % par défaut).
+  couleur permanente, et couleur d'alerte (rouge 100 % par défaut, réservée aux portes, coffre, frunk et warnings).
 - Écran sombre en cartes : état, rétroviseurs, couleurs, derniers événements (heure de chaque porte,
   connexion du ruban… pour voir d'où vient un retard), actions, règles, ruban et mise à jour.
 

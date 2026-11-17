@@ -463,7 +463,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable introTick = new Runnable() {
         @Override public void run() {
             if (!intro) return;
-            int pct = animPct();      // the animation runs in the animation colour
+            int pct = targetPct();    // the entrance runs in the steady (ambient) colour
             if (introFrame >= INTRO_FRAMES) {
                 introRound++;
                 if (introRound < repeats()) {
@@ -482,7 +482,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 double f = (t - introStart(i)) / INTRO_FADE;
                 vals[i] = f <= 0 ? 0 : f >= 1 ? pct : (int) Math.round(pct * f);
             }
-            link.send(Zengge.levels(settings.blinkHue, settings.blinkSat, vals));
+            link.send(Zengge.levels(settings.defaultHue, settings.defaultSat, vals));
             lastSentMs = SystemClock.elapsedRealtime();
             introFrame++;
             main.postDelayed(this, INTRO_FRAME_MS);
