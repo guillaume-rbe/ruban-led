@@ -101,6 +101,11 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     /** Both indicators lit right now, and the flashes counted in the current burst. */
     private boolean bothLit;
     private int flashes;
+    /** Welcome lights (postlight) on, and when the last unlock was seen. */
+    private boolean parkOn;
+    private long lastUnlockMs = -100000, parkOnMs = -100000;
+    /** A single flash this soon after an unlock is part of the unlock, not a lock. */
+    private static final long UNLOCK_GRACE_MS = 5000;
     /** A burst of flashes is over after this long without a new one (they come ~0.5 s apart). */
     private static final long BURST_END_MS = 1200;
     /** From this many flashes in one burst it is the hazards, not a lock confirmation. */
@@ -632,9 +637,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         doorsOpen = open;
         if (opened != 0) {
             event(describe(opened));
-            if (intro) return;                          // the entrance animation goes on
-            // a door can only open unlocked: if the unlock was missed, this is the arrival
+            // a door can only open unlocked: if the unlock was missed (or a flash was mistaken for
+            // a lock), this is the arrival, even during an animation (17 Nov: the strip went dark)
             if (away()) { onPresence(true, "Porte ouverte voiture verrouillée"); return; }
+            if (intro) return;                          // the entrance animation goes on
             // otherwise always the alert blink (owner, 17 Nov): the animations come only from the
             // lock / unlock detection, never from a door
             if (settings.doorBlink) startBlink(settings.blinkMaxSec);
@@ -651,7 +657,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         Settings.savePresence(this, there);
         event(why);
         if (there) {
-            // the owner is back: lit, then the steady colour
+            lastUnlockMs = SystemClock.elapsedRealtime();
+            // the owner is back: lit, then the steady colour (an entrance already playing just
+            // goes on: it ends on the steady colour now that the car counts as unlocked)
+            if (intro) return;
             if (settings.intro) playIntro();
             else { stopAll(); steady(); }
         } else {
@@ -689,13 +698,28 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         @Override public void run() {
             int n = flashes;
             flashes = 0;
-            if (n == 1) onPresence(false, "Verrouillage (1 flash)");
-            else if (n == 2) onPresence(true, "Déverrouillage (2 flashs)");
+            if (n == 1) {
+                // the welcome lights are on with the unlock and off at the lock; and a single flash
+                // right after an unlock is its double flash half seen (17 Nov 12:52: the app had
+                // just started and saw one of the two, and took it for a lock)
+                // (welcome lights only if they just came on: at night the lights can stay on a
+                // while after getting out, and the lock must still count then)
+                long now = SystemClock.elapsedRealtime();
+                if ((parkOn && now - parkOnMs < UNLOCK_GRACE_MS) || now - lastUnlockMs < UNLOCK_GRACE_MS) {
+                    event("1 flash ignoré (déverrouillage en cours)");
+                    return;
+                }
+                onPresence(false, "Verrouillage (1 flash)");
+            } else if (n == 2) {
+                onPresence(true, "Déverrouillage (2 flashs)");
+            }
         }
     };
 
     /** The parking/welcome lights come on with the unlock, just before its two flashes. */
     @Override public void onParkLights(boolean on) {
+        parkOn = on;
+        if (on) parkOnMs = SystemClock.elapsedRealtime();
         if (on && away()) onPresence(true, "Déverrouillage (feux d'accueil)");
     }
 
