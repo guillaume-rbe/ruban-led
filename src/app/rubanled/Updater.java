@@ -79,7 +79,7 @@ final class Updater {
                     Log.w(LOG, "update failed", t);
                     status("Mise à jour impossible : " + t.getMessage()
                         + (viaSystem ? " (même via le gestionnaire de téléchargements d'Android). "
-                            + "Désinstaller puis réinstaller l'app par ADB corrige un accès réseau refusé." : ""));
+                            + "Redémarrer l'écran une fois corrige un accès réseau refusé." : ""));
                 }
             }
         }, "updater").start();
@@ -176,7 +176,9 @@ final class Updater {
             } catch (java.net.SocketException | java.net.UnknownHostException | SecurityException e) {
                 Log.w(LOG, "own connection refused, using DownloadManager", e);
                 viaSystem = true;
-                status("Connexion de l'app refusée par Android : téléchargement via Android…");
+                // normal until the dash restarts once after an update that added the network
+                // permission (Android 10 applies it at boot): not an error, so a plain message
+                status("Téléchargement…");
             }
         }
         return viaDownloadManager(url, name, max);

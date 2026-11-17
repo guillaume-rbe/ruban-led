@@ -179,6 +179,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             // unlock must not keep the strip dark)
             if (Intent.ACTION_SCREEN_ON.equals(i.getAction()) && Boolean.FALSE.equals(ownerThere)) {
                 ownerThere = null;
+                Settings.savePresence(LedService.this, null);
                 presenceText = "Présence : inconnue (en attente d'un verrouillage)";
             }
             if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
@@ -216,6 +217,12 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "rubanled:animation");
         wake.setReferenceCounted(false);
         settings = Settings.load(this);
+        // the lock state from before the restart (an update restarts the app)
+        ownerThere = Settings.loadPresence(this);
+        if (ownerThere != null) {
+            presenceText = "Présence : " + (ownerThere ? "déverrouillée (conducteur là)" : "verrouillée (absent)")
+                + " · état d'avant le redémarrage";
+        }
         link = new LedLink(this, this);
         doors = new DoorFeed(this, this, logicThread.getLooper());
         link.start(settings.address);
@@ -641,6 +648,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         presenceText = "Présence : " + (there ? "déverrouillée (conducteur là)" : "verrouillée (absent)");
         if (ownerThere != null && ownerThere == there) return;
         ownerThere = there;
+        Settings.savePresence(this, there);
         event(why);
         if (there) {
             // the owner is back: lit, then the steady colour

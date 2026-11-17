@@ -19,6 +19,7 @@ de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules transactions
   Relevé le 17 nov. : verrouillage auto en s'éloignant ≈ 10 s après la fermeture de la porte ;
   au retour, feux d'accueil puis deux flashs au moment où la porte s'ouvre. Il faut la
   confirmation lumineuse du verrouillage activée dans les réglages Tesla.
+  Le dernier état (verrouillée / déverrouillée) est gardé quand l'app redémarre (mise à jour).
 - **Animations** : uniquement au verrouillage et au déverrouillage détectés (jamais sur une porte).
   L'allumage remplit le ruban progressivement (~5 s, **3 fois**) dans la couleur permanente
   (ambiante) : les portes de l'arrière vers l'avant, le tableau de bord depuis les deux bouts.

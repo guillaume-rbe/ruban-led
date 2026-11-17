@@ -128,6 +128,20 @@ final class Settings {
         return x.get(Calendar.DAY_OF_MONTH);
     }
 
+    /**
+     * Last lock state heard (owner, 17 Nov: kept across an update or a restart of the app):
+     * null not known, true unlocked (the owner is there), false locked. Kept apart from save(),
+     * which the settings screen calls with values it read earlier.
+     */
+    static Boolean loadPresence(Context ctx) {
+        int v = prefs(ctx).getInt("presence", -1);
+        return v < 0 ? null : v == 1;
+    }
+
+    static void savePresence(Context ctx, Boolean there) {
+        prefs(ctx).edit().putInt("presence", there == null ? -1 : there ? 1 : 0).apply();
+    }
+
     private static SharedPreferences prefs(Context ctx) {
         return ctx.getSharedPreferences("ruban", Context.MODE_PRIVATE);
     }
