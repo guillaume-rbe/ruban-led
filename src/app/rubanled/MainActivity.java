@@ -92,15 +92,27 @@ public final class MainActivity extends Activity {
 
 
         LinearLayout colours = card(left, "Couleurs");
-        colours.addView(new ColourPanel(LedService.TARGET_STEADY, "Permanente",
-            s.defaultHue, s.defaultSat, s.dayPct).view);
+        // locked by default (owner, 17 Nov): a scroll over a wheel must not change a colour
+        lockButton = pill("", false);
+        lockButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { setColoursLocked(!coloursLocked); }
+        });
+        LinearLayout.LayoutParams lb = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lb.bottomMargin = dp(12);
+        colours.addView(lockButton, lb);
+        steadyPanel = new ColourPanel(LedService.TARGET_STEADY, "Permanente",
+            s.defaultHue, s.defaultSat, s.dayPct);
+        colours.addView(steadyPanel.view);
         View sep = new View(this);
         sep.setBackgroundColor(CARD_LINE);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
         sp.setMargins(0, dp(14), 0, dp(14));
         colours.addView(sep, sp);
-        colours.addView(new ColourPanel(LedService.TARGET_ANIM, "Alertes (portes, coffre, frunk, warnings)",
-            s.blinkHue, s.blinkSat, s.blinkPct).view);
+        alertPanel = new ColourPanel(LedService.TARGET_ANIM, "Alertes (portes, coffre, frunk, warnings)",
+            s.blinkHue, s.blinkSat, s.blinkPct);
+        colours.addView(alertPanel.view);
+        setColoursLocked(true);
 
         LinearLayout log = card(left, "Derniers événements");
         eventsLine = text("", 14, MUTED, false);
@@ -198,8 +210,31 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         main.removeCallbacks(refresh);
+        setColoursLocked(true);              // locked again whenever the app is left
         super.onPause();
     }
+
+    private ColourPanel steadyPanel, alertPanel;
+    private Button lockButton;
+    private boolean coloursLocked = true;
+    /** Unlocked colours lock again after this long. */
+    private static final long UNLOCK_MS = 2 * 60 * 1000L;
+
+    private void setColoursLocked(boolean l) {
+        coloursLocked = l;
+        if (steadyPanel != null) steadyPanel.setLocked(l);
+        if (alertPanel != null) alertPanel.setLocked(l);
+        if (lockButton != null) {
+            lockButton.setText(l ? "🔒  Couleurs verrouillées : toucher pour modifier"
+                : "🔓  Modification possible : toucher pour verrouiller");
+        }
+        main.removeCallbacks(relock);
+        if (!l) main.postDelayed(relock, UNLOCK_MS);
+    }
+
+    private final Runnable relock = new Runnable() {
+        @Override public void run() { setColoursLocked(true); }
+    };
 
     private final Runnable refresh = new Runnable() {
         @Override public void run() {
@@ -411,8 +446,16 @@ public final class MainActivity extends Activity {
         private final String target;
         private final View swatch;
         private final TextView pctLabel;
+        private final ColourWheel wheel;
+        private final SeekBar bar;
         private int hue, sat, pct;
         private long lastSentMs;
+
+        void setLocked(boolean l) {
+            wheel.setLocked(l);
+            bar.setEnabled(!l);
+            bar.setAlpha(l ? 0.45f : 1f);
+        }
 
         ColourPanel(String target, String title, int hue0, int sat0, int pct0) {
             this.target = target;
@@ -421,7 +464,7 @@ public final class MainActivity extends Activity {
             pct = pct0;
             LinearLayout row = new LinearLayout(MainActivity.this);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            ColourWheel wheel = new ColourWheel(MainActivity.this);
+            wheel = new ColourWheel(MainActivity.this);
             wheel.setColour(hue, sat);
             row.addView(wheel, new LinearLayout.LayoutParams(dp(170), dp(170)));
 
@@ -435,7 +478,7 @@ public final class MainActivity extends Activity {
             pctLabel = text("", 15, MUTED, false);
             pctLabel.setPadding(0, dp(10), 0, 0);
             right.addView(pctLabel);
-            SeekBar bar = new SeekBar(MainActivity.this);
+            bar = new SeekBar(MainActivity.this);
             bar.setMax(99);
             bar.setProgress(pct - 1);
             bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -459,6 +502,7 @@ public final class MainActivity extends Activity {
                 }
             });
             preview();
+            setLocked(true);
             view = row;
         }
 
@@ -474,6 +518,9 @@ public final class MainActivity extends Activity {
             long now = SystemClock.elapsedRealtime();
             if (!done && now - lastSentMs < COLOUR_THROTTLE_MS) return;
             lastSentMs = now;
+            // still being edited: the automatic re-lock counts from the last change
+            main.removeCallbacks(relock);
+            main.postDelayed(relock, UNLOCK_MS);
             Intent i = new Intent(MainActivity.this, LedService.class)
                 .setAction(LedService.ACTION_SET_COLOUR)
                 .putExtra("target", target)

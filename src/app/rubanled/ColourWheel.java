@@ -40,6 +40,18 @@ final class ColourWheel extends View {
         listener = l;
     }
 
+    /**
+     * Locked (owner, 17 Nov: a finger scrolling the page over the alert wheel turned it blue):
+     * touches go to the page, the wheel is drawn dimmed. Unlocked from the app's button.
+     */
+    private boolean locked = true;
+
+    void setLocked(boolean l) {
+        locked = l;
+        setAlpha(l ? 0.45f : 1f);
+        invalidate();
+    }
+
     void setColour(int hue, int sat) {
         this.hue = hue;
         this.sat = sat;
@@ -79,11 +91,14 @@ final class ColourWheel extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
+        if (locked) return false;                               // the page scrolls
         int action = e.getActionMasked();
         if (action != MotionEvent.ACTION_DOWN && action != MotionEvent.ACTION_MOVE
             && action != MotionEvent.ACTION_UP) return super.onTouchEvent(e);
-        getParent().requestDisallowInterceptTouchEvent(true);   // don't scroll the page
         float dx = e.getX() - cx, dy = e.getY() - cy;
+        // a touch must start on the wheel itself, not in the corners of its square
+        if (action == MotionEvent.ACTION_DOWN && Math.hypot(dx, dy) > radius * 1.1) return false;
+        getParent().requestDisallowInterceptTouchEvent(true);   // don't scroll the page
         double deg = Math.toDegrees(Math.atan2(dy, dx));
         if (deg < 0) deg += 360;
         hue = (int) Math.round(deg) % 360;
