@@ -3,7 +3,8 @@
 #   1. bump android:versionCode (and versionName) in AndroidManifest.xml
 #   2. commit and push the ruban-led branch
 #   3. bash release.sh
-# The release is tagged ruban-led-v<versionCode>, not marked "latest" (that stays Binnacle's), and
+# The release is tagged ruban-led-v<versionCode> and marked "latest" (the fork only has Ruban LED
+# releases; GitHub sorts the list by tag, so v10 shows below v9 otherwise), and
 # carries ruban-led.apk and its SHA-256. Always sign with the same key (this PC's debug keystore),
 # or Android refuses the update.
 set -euo pipefail
@@ -24,7 +25,7 @@ bash build.sh
 sha256sum build/ruban-led.apk | cut -d' ' -f1 > build/ruban-led.apk.sha256
 
 "$GH" release create "$TAG" build/ruban-led.apk build/ruban-led.apk.sha256 \
-    --repo "$REPO" --target ruban-led --latest=false \
+    --repo "$REPO" --target ruban-led --latest \
     --title "Ruban LED $NAME" \
     --notes "Ruban LED $NAME (versionCode $CODE). Installée depuis l'app : bouton « Mise à jour »."
 echo "published $TAG"
