@@ -122,7 +122,7 @@ public final class MainActivity extends Activity {
         actions.addView(row2, r2);
 
         LinearLayout rules = card(right, "Règles");
-        toggle(rules, "Animation d'entrée", "À la première porte ouverte après le réveil de la voiture",
+        toggle(rules, "Animations ×3", "Allumage au déverrouillage, extinction au verrouillage (sinon allumé / éteint d'un coup)",
             s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } });
         toggle(rules, "Clignoter quand une porte s'ouvre", null,
             s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } });

@@ -127,11 +127,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private boolean brightnessPending;
     private boolean intro;
     private int introFrame, introRound;
-    /**
-     * Armed when the car wakes (service start, dash screen on, strip powered back): the first door
-     * opened then plays the start-up animation instead of blinking (owner, 16 Nov).
-     */
-    private boolean introPending = true;
     /** A door opened while armed but before the strip was connected: play it once connected. */
     private long introWantedMs;
     private static final long INTRO_WANTED_MS = 60000;
@@ -172,8 +167,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     private final BroadcastReceiver screenOn = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) {
-            // the next door opened plays the animation
-            introPending = true;
             // the car slept or woke: the lock state is heard again at the next flash (a missed
             // unlock must not keep the strip dark)
             if (Intent.ACTION_SCREEN_ON.equals(i.getAction()) && Boolean.FALSE.equals(ownerThere)) {
@@ -182,14 +175,14 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             }
             if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
                 // the dash sleeps with the car: the strip (glovebox USB, powered while the car is
-                // awake, Sentry included) withdraws and goes dark until a door is opened, unless
-                // the car is charging with the owner there (the gauge stays)
+                // awake, Sentry included) goes dark, without an animation (only lock / unlock
+                // animate, owner 17 Nov), unless the car is charging with the owner there
                 event("Écran éteint");
                 screenIsOn = false;
                 main.removeCallbacks(previewEnd);
                 main.removeCallbacks(introFinal);
                 if (charging && present()) showGauge();
-                else if (!exiting) playExit();
+                else if (!exiting) { stopAll(); power(false); ruleText = "Ruban éteint"; }
             } else {
                 event("Écran allumé");
                 screenIsOn = true;
@@ -396,24 +389,12 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         steady();
     }
 
-    /** A door opened while armed: the start-up animation (now, or once the strip connects). */
-    private void maybeIntro() {
-        if (!link.isReady()) {
-            introWantedMs = SystemClock.elapsedRealtime();
-            event("Ruban pas encore connecté : animation à la connexion");
-            awake(INTRO_WANTED_MS);
-            return;
-        }
-        playIntro();
-    }
-
     /** Start-up animation, 3 times: the strip lights up progressively, then the steady colour. */
     private void playIntro() {
         if (!link.isReady()) {
             introWantedMs = SystemClock.elapsedRealtime();
             return;
         }
-        introPending = false;
         introWantedMs = 0;
         gauge = false;
         main.removeCallbacks(gaugeTick);
@@ -604,7 +585,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 linkText = text;
                 long now = SystemClock.elapsedRealtime();
                 if (ready) {
-                    if (linkLostMs != 0 && now - linkLostMs > STRIP_OFF_MS) introPending = true;
                     linkLostMs = 0;
                     if (introWantedMs != 0 && now - introWantedMs < INTRO_WANTED_MS) playIntro();
                     introWantedMs = 0;
@@ -640,10 +620,9 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             if (intro) return;                          // the entrance animation goes on
             // a door can only open unlocked: if the unlock was missed, this is the arrival
             if (away()) { onPresence(true, "Porte ouverte voiture verrouillée"); return; }
-            // unlocked: the arrival animation came with the unlock, so a blink
-            if (ownerThere != null) { if (settings.doorBlink) startBlink(settings.blinkMaxSec); return; }
-            if (introPending && settings.intro) maybeIntro();     // lock state unknown: the first door
-            else if (settings.doorBlink) startBlink(settings.blinkMaxSec);
+            // otherwise always the alert blink (owner, 17 Nov): the animations come only from the
+            // lock / unlock detection, never from a door
+            if (settings.doorBlink) startBlink(settings.blinkMaxSec);
         } else if (!open && !hazardOn) {
             stopBlink();
         }
@@ -656,10 +635,12 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         ownerThere = there;
         event(why);
         if (there) {
-            playIntro();                     // the owner is back: lit, then the steady colour
+            // the owner is back: lit, then the steady colour
+            if (settings.intro) playIntro();
+            else { stopAll(); steady(); }
         } else {
             if (hazardOn) { hazardOn = false; main.removeCallbacks(hazardCheck); }
-            if (strip == null || !strip.on) { stopAll(); power(false); return; }
+            if (!settings.intro || strip == null || !strip.on) { stopAll(); power(false); return; }
             playExit();                      // the owner leaves: withdraw, then off
         }
     }
@@ -730,7 +711,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             main.removeCallbacks(gaugeTick);
             ruleText = "";
             if (screenIsOn && present()) steady();
-            else playExit();
+            else { stopAll(); power(false); }
         }
     }
 

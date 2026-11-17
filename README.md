@@ -19,12 +19,13 @@ de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules transactions
   Relevé le 17 nov. : verrouillage auto en s'éloignant ≈ 10 s après la fermeture de la porte ;
   au retour, feux d'accueil puis deux flashs au moment où la porte s'ouvre. Il faut la
   confirmation lumineuse du verrouillage activée dans les réglages Tesla.
-- **Animation d'entrée** (tant qu'aucun verrouillage n'a été vu depuis le réveil) : à la première porte ouverte après le réveil de la voiture (écran rallumé,
-  ruban rebranché après plus d'une minute, démarrage de l'app), le ruban se remplit progressivement
-  (~5 s, **3 fois**) dans la couleur permanente (ambiante), puis reste dessus. Les portes se remplissent de l'arrière vers l'avant ; le tableau de
-  bord part des deux bouts.
-- **Clignotement** : ensuite, chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
-  ouverte) fait clignoter le ruban (couleur d'alerte, rouge par défaut, 100 % ↔ 1 %, 400 ms, 2 min max).
+- **Animations** : uniquement au verrouillage et au déverrouillage détectés (jamais sur une porte).
+  L'allumage remplit le ruban progressivement (~5 s, **3 fois**) dans la couleur permanente
+  (ambiante) : les portes de l'arrière vers l'avant, le tableau de bord depuis les deux bouts.
+  L'extinction fait l'inverse. Interrupteur « Animations ×3 » : sans lui, allumé / éteint d'un coup.
+- **Clignotement** : chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
+  ouverte, et même conducteur à bord) fait clignoter le ruban (couleur d'alerte, rouge par défaut,
+  100 % ↔ 1 %, 400 ms, 2 min max).
 - **Après chaque animation** : toujours la couleur permanente (la jauge pendant la recharge), ou
   ruban éteint si la voiture est verrouillée.
 - **Warnings** : à partir de **3 flashs** de suite des deux clignotants (1 ou 2, c'est le
@@ -32,8 +33,8 @@ de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules transactions
 - **Recharge** : pendant la charge (code 9 `chargelight`), et seulement voiture déverrouillée, le ruban
   devient une jauge verte du pourcentage de batterie (code 11, décodé comme Binnacle), remplie
   depuis la droite du tableau de bord, son extrémité pulsant.
-- **Veille** : quand l'écran s'éteint (voiture endormie), la lumière se retire progressivement
-  (ordre inverse de l'entrée, ~3 s, 3 fois), puis le ruban s'éteint. Utile car il est alimenté par
+- **Veille** : quand l'écran s'éteint (voiture endormie), le ruban s'éteint, sans animation
+  (en général il l'est déjà depuis le verrouillage). Utile car il est alimenté par
   l'USB de la boîte à gants, qui reste alimenté tant que la voiture est éveillée (Sentinelle
   comprise).
 - **Mode nuit**, activé par défaut : de 19 h (heure d'hiver) ou 21 h (heure d'été) à 7 h, tout le
