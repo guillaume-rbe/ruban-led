@@ -21,23 +21,21 @@ import android.util.Log;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /**
- * Keeps the strip connected and applies the rules (owner, 16 Nov):
- * - mirrors unfold (the owner is there): entrance animation, 3 times, then the steady colour;
- * - mirrors fold (the owner leaves): exit animation, 3 times, then off;
- * - the mirrors say whether the owner is there: folded, nothing lights up (no door blink, no
- *   hazards, no gauge) to save energy;
- * - a door opened with the owner there: a blink (without a mirror field: the entrance animation
- *   for the first door after the car wakes); afterwards always the steady colour;
- * - charging: a green gauge, only while the mirrors are unfolded;
+ * Keeps the strip connected and applies the rules (owner, 16-17 Nov):
+ * - the car unlocks (the owner is back): entrance animation, 3 times, in the steady (ambient)
+ *   colour, then the steady colour;
+ * - the car locks (the owner leaves): exit animation, 3 times, then off;
+ * - locked, nothing lights up (no hazards, no gauge) to save energy;
+ * - a door opened with the owner there: a blink in the alert colour (red), the only use of red
+ *   with the hazards; afterwards always the steady colour;
+ * - charging: a green gauge, only while the owner is there;
+ * Locking is read from the indicators (code 9), the car's own lock confirmation, seen in the CAN
+ * feed on 17 Nov (the mirrors aren't in it): one flash of both indicators = locked; two flashes,
+ * or the parking/welcome lights coming on (postlight) = unlocked; three or more = hazards.
  * - night (19 h winter / 21 h summer to 7 h): everything at 20 %.
  * The rules run on their own high-priority thread (not the UI thread), so a door message is
  * handled at once even when the screen is busy.
@@ -51,11 +49,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     static final String ACTION_TEST_SEGMENTS = "app.rubanled.TEST_SEGMENTS";
     static final String ACTION_INTRO = "app.rubanled.INTRO";
     static final String ACTION_EXIT = "app.rubanled.EXIT";
-    /** Mirror detection: 1. mirrors unfolded, 2. mirrors folded, then pick (extra "index"). */
-    static final String ACTION_LEARN_OPEN = "app.rubanled.LEARN_OPEN";
-    static final String ACTION_LEARN_FOLDED = "app.rubanled.LEARN_FOLDED";
-    static final String ACTION_LEARN_PICK = "app.rubanled.LEARN_PICK";
-    static final String ACTION_MIRROR_FORGET = "app.rubanled.MIRROR_FORGET";
     /** Extras: hue 0-359, sat 0-100, pct 1-100. Saved as the colour, applied at once. */
     static final String ACTION_SET_COLOUR = "app.rubanled.SET_COLOUR";
     /** Extra "target" of ACTION_SET_COLOUR: the steady colour, or the animations' one. */
@@ -73,13 +66,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     static volatile String linkText = "Service arrêté";
     static volatile String feedText = "";
     static volatile String doorsText = "Portes : inconnu";
-    static volatile String mirrorText = "Rétroviseurs : non configurés";
+    static volatile String presenceText = "Présence : inconnue (en attente d'un verrouillage)";
     static volatile String stripText = "Ruban : état inconnu";
     static volatile String ruleText = "";
     static volatile String eventsText = "";
-    static volatile String learnText = "";
-    /** Mirror detection result: one line per candidate, picked with ACTION_LEARN_PICK. */
-    static volatile String[] learnChoices = new String[0];
 
     private HandlerThread logicThread;
     private Handler main;            // the rules' thread (high priority), not the UI thread
@@ -103,8 +93,18 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     /** Indicators flash about every 0.7 s: no "both lit" for this long means the hazards are off. */
     private static final long HAZARD_OFF_MS = 2500;
 
-    /** Mirrors as last reported (null: not set up or not heard yet, taken as unfolded). */
-    private Boolean mirrorsOpen;
+    /**
+     * The owner is there (car unlocked) or not (locked), from the lock confirmation flashes.
+     * null: not known yet (since the car woke), taken as there with the screen/door rules.
+     */
+    private Boolean ownerThere;
+    /** Both indicators lit right now, and the flashes counted in the current burst. */
+    private boolean bothLit;
+    private int flashes;
+    /** A burst of flashes is over after this long without a new one (they come ~0.5 s apart). */
+    private static final long BURST_END_MS = 1200;
+    /** From this many flashes in one burst it is the hazards, not a lock confirmation. */
+    private static final int HAZARD_FLASHES = 3;
 
     /** Charging: the strip is a green gauge of the battery % (owner, 16 Nov). */
     private boolean charging;
@@ -155,13 +155,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private static final double INTRO_FADE = 0.12;
     private static final int INTRO_FRAMES = 28;
 
-    /** Mirror detection: values when unfolded (snapshot 1), and the candidates found. */
-    private Map<String, String> learnOpen;
-    private final List<String[]> learnFound = new ArrayList<>();   // {code:key, open, folded}
-    private static final long LEARN_READ_MS = 3000;
-    private static final long LEARN_TIMEOUT_MS = 5 * 60 * 1000L;
-    /** A field that changed more often than this during the detection is noise, not the mirrors. */
-    private static final int LEARN_MAX_CHANGES = 6;
 
     private static double introStart(int i) {
         if (i < DOOR_SEGMENTS) return (double) i / DOOR_SEGMENTS;                          // 0 .. 0.9
@@ -181,6 +174,12 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         @Override public void onReceive(Context c, Intent i) {
             // the next door opened plays the animation
             introPending = true;
+            // the car slept or woke: the lock state is heard again at the next flash (a missed
+            // unlock must not keep the strip dark)
+            if (Intent.ACTION_SCREEN_ON.equals(i.getAction()) && Boolean.FALSE.equals(ownerThere)) {
+                ownerThere = null;
+                presenceText = "Présence : inconnue (en attente d'un verrouillage)";
+            }
             if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
                 // the dash sleeps with the car: the strip (glovebox USB, powered while the car is
                 // awake, Sentry included) withdraws and goes dark until a door is opened, unless
@@ -194,7 +193,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             } else {
                 event("Écran allumé");
                 screenIsOn = true;
-                if (exiting && !folded()) {
+                if (exiting && !away()) {
                     exiting = false;
                     main.removeCallbacks(exitTick);
                     power(false);
@@ -218,7 +217,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         settings = Settings.load(this);
         link = new LedLink(this, this);
         doors = new DoorFeed(this, this, logicThread.getLooper());
-        applyMirrorSettings();
         link.start(settings.address);
         doors.start();
         main.post(nightCheck);
@@ -255,7 +253,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (ACTION_RELOAD.equals(a)) {
             settings = Settings.load(this);
             link.start(settings.address);
-            applyMirrorSettings();
             lastNight = null;          // re-apply the brightness rule with the new hours
             main.removeCallbacks(nightCheck);
             main.post(nightCheck);
@@ -280,18 +277,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         } else if (ACTION_EXIT.equals(a)) {
             if (strip == null || !strip.on) { power(true); colour(settings.defaultHue, settings.defaultSat, targetPct(), true); }
             playExit();
-        } else if (ACTION_LEARN_OPEN.equals(a)) {
-            learnStart();
-        } else if (ACTION_LEARN_FOLDED.equals(a)) {
-            learnFolded();
-        } else if (ACTION_LEARN_PICK.equals(a) && intent != null) {
-            learnPick(intent.getIntExtra("index", -1));
-        } else if (ACTION_MIRROR_FORGET.equals(a)) {
-            learnStop("");
-            settings.mirrorCode = -1;
-            settings.mirrorKey = settings.mirrorOpen = settings.mirrorFolded = "";
-            settings.save(this);
-            applyMirrorSettings();
         } else if (ACTION_SET_COLOUR.equals(a) && intent != null) {
             if (TARGET_ANIM.equals(intent.getStringExtra("target"))) {
                 setAnimColour(intent.getIntExtra("hue", settings.blinkHue), intent.getIntExtra("sat", settings.blinkSat),
@@ -323,24 +308,14 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     // ---- state ----
 
-    /** The owner is there: mirrors unfolded, or not known (not set up: the old rules). */
+    /** The owner is there: unlocked, or not known yet (then the screen and door rules). */
     private boolean present() {
-        return mirrorsOpen == null || mirrorsOpen;
+        return ownerThere == null || ownerThere;
     }
 
-    private boolean folded() {
-        return mirrorsOpen != null && !mirrorsOpen;
-    }
-
-    private void applyMirrorSettings() {
-        if (settings.mirrorsSetUp()) {
-            doors.setMirror(settings.mirrorCode, settings.mirrorKey, settings.mirrorOpen, settings.mirrorFolded);
-            if (mirrorsOpen == null) mirrorText = "Rétroviseurs : en attente de l'app CAN";
-        } else {
-            doors.setMirror(-1, "", "", "");
-            mirrorsOpen = null;
-            mirrorText = "Rétroviseurs : non configurés (règles écran et portes)";
-        }
+    /** The car is locked: the owner has left. */
+    private boolean away() {
+        return ownerThere != null && !ownerThere;
     }
 
     /** Animation brightness: the animation colour's, at most the night one at night. */
@@ -403,18 +378,18 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /**
      * After any animation (owner, 16 Nov): always the steady colour; the green gauge instead while
-     * charging; off if the mirrors are folded (the owner has left).
+     * charging; off if the car is locked (the owner has left).
      */
     private void afterAnimation() {
         ruleText = "";
-        if (folded()) {
-            ruleText = "Rétroviseurs repliés : ruban éteint";
+        if (away()) {
+            ruleText = "Voiture verrouillée : ruban éteint";
             power(false);
             return;
         }
         if (charging) { showGauge(); return; }
-        if (!screenIsOn && mirrorsOpen == null) {
-            // no mirror field: the screen tells whether the car sleeps
+        if (!screenIsOn && ownerThere == null) {
+            // lock state not known: the screen tells whether the car sleeps
             power(false);
             return;
         }
@@ -491,7 +466,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     private final Runnable introFinal = new Runnable() {
         @Override public void run() {
-            if (blinking || intro || exiting || gauge || folded()) return;
+            if (blinking || intro || exiting || gauge || away()) return;
             colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
         }
     };
@@ -663,42 +638,68 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (opened != 0) {
             event(describe(opened));
             if (intro) return;                          // the entrance animation goes on
-            // the mirrors tell whether the owner is there (owner, 16 Nov): away, the strip stays
-            // off to save energy; there, the arrival animation came with the mirrors, so a blink
-            if (folded()) { event("Absent (rétros repliés) : ruban éteint"); return; }
-            if (mirrorsOpen != null) { if (settings.doorBlink) startBlink(settings.blinkMaxSec); return; }
-            if (introPending && settings.intro) maybeIntro();     // no mirror field: the first door
+            // a door can only open unlocked: if the unlock was missed, this is the arrival
+            if (away()) { onPresence(true, "Porte ouverte voiture verrouillée"); return; }
+            // unlocked: the arrival animation came with the unlock, so a blink
+            if (ownerThere != null) { if (settings.doorBlink) startBlink(settings.blinkMaxSec); return; }
+            if (introPending && settings.intro) maybeIntro();     // lock state unknown: the first door
             else if (settings.doorBlink) startBlink(settings.blinkMaxSec);
         } else if (!open && !hazardOn) {
             stopBlink();
         }
     }
 
-    @Override public void onMirrors(boolean open) {
-        mirrorText = "Rétroviseurs : " + (open ? "dépliés" : "repliés");
-        if (mirrorsOpen != null && mirrorsOpen == open) return;
-        Boolean before = mirrorsOpen;
-        mirrorsOpen = open;
-        if (before == null) return;          // first reading: just note it
-        event(open ? "Rétroviseurs dépliés" : "Rétroviseurs repliés");
-        if (open) {
+    /** The owner arrives (unlocked) or leaves (locked). */
+    private void onPresence(boolean there, String why) {
+        presenceText = "Présence : " + (there ? "déverrouillée (conducteur là)" : "verrouillée (absent)");
+        if (ownerThere != null && ownerThere == there) return;
+        ownerThere = there;
+        event(why);
+        if (there) {
             playIntro();                     // the owner is back: lit, then the steady colour
         } else {
-            if (strip == null || !strip.on) { power(false); return; }
+            if (hazardOn) { hazardOn = false; main.removeCallbacks(hazardCheck); }
+            if (strip == null || !strip.on) { stopAll(); power(false); return; }
             playExit();                      // the owner leaves: withdraw, then off
         }
     }
 
+    /**
+     * Each flash of both indicators together is counted; when the burst is over, one flash is the
+     * lock confirmation, two the unlock one. Three or more: the hazards (only then the strip blinks,
+     * so locking no longer looks like hazards). One side alone is a turn signal.
+     */
     @Override public void onIndicators(boolean left, boolean right) {
-        if (!left || !right) return;            // one side alone is a turn signal
+        boolean both = left && right;
+        boolean rising = both && !bothLit;
+        bothLit = both;
+        if (!both) return;
         lastBothLitMs = SystemClock.elapsedRealtime();
-        if (hazardOn || !settings.hazard || folded()) return;     // away: no light
+        if (!rising) return;
+        flashes++;
+        main.removeCallbacks(burstEnd);
+        main.postDelayed(burstEnd, BURST_END_MS);
+        if (flashes < HAZARD_FLASHES || hazardOn || !settings.hazard || away()) return;
         hazardOn = true;
         event("Warnings");
         startBlink(settings.blinkMaxSec);
         ruleText = "Warnings : clignotement";
         main.removeCallbacks(hazardCheck);
         main.postDelayed(hazardCheck, 500);
+    }
+
+    private final Runnable burstEnd = new Runnable() {
+        @Override public void run() {
+            int n = flashes;
+            flashes = 0;
+            if (n == 1) onPresence(false, "Verrouillage (1 flash)");
+            else if (n == 2) onPresence(true, "Déverrouillage (2 flashs)");
+        }
+    };
+
+    /** The parking/welcome lights come on with the unlock, just before its two flashes. */
+    @Override public void onParkLights(boolean on) {
+        if (on && away()) onPresence(true, "Déverrouillage (feux d'accueil)");
     }
 
     private final Runnable hazardCheck = new Runnable() {
@@ -733,7 +734,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         }
     }
 
-    /** Green gauge of the battery % while charging, only with the owner there (mirrors unfolded). */
+    /** Green gauge of the battery % while charging, only with the owner there (unlocked). */
     private void showGauge() {
         if (blinking || intro || !link.isReady() || !present()) return;
         exiting = false;
@@ -814,99 +815,6 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     @Override public void onFeedState(String text) {
         feedText = text;
-    }
-
-    // ---- mirror detection ----
-
-    /** Step 1, mirrors unfolded: read every field for a few seconds, then keep their values. */
-    private void learnStart() {
-        main.removeCallbacks(learnSnapshot);
-        main.removeCallbacks(learnTimeout);
-        learnFound.clear();
-        learnChoices = new String[0];
-        doors.setLearning(false);
-        doors.setLearning(true);
-        learnText = "Lecture des données… (3 s)";
-        main.postDelayed(learnSnapshot, LEARN_READ_MS);
-        main.postDelayed(learnTimeout, LEARN_TIMEOUT_MS);
-    }
-
-    private final Runnable learnSnapshot = new Runnable() {
-        @Override public void run() {
-            learnOpen = new HashMap<>(doors.learnValues);
-            learnText = learnOpen.size() + " données lues. Repliez les rétroviseurs (écran de la Tesla), "
-                + "attendez qu'ils soient repliés, puis touchez « 2. Rétros repliés ».";
-        }
-    };
-
-    private final Runnable learnTimeout = new Runnable() {
-        @Override public void run() { learnStop("Détection annulée (5 min sans fin)"); }
-    };
-
-    /** Step 2, mirrors folded: the fields that changed since step 1, steadiest first. */
-    private void learnFolded() {
-        if (!doors.isLearning() || learnOpen == null) {
-            learnText = "Touchez d'abord « 1. Rétros dépliés » (rétroviseurs dépliés).";
-            return;
-        }
-        learnFound.clear();
-        final Map<String, Integer> changes = doors.learnChanges;
-        for (Map.Entry<String, String> e : doors.learnValues.entrySet()) {
-            String before = learnOpen.get(e.getKey());
-            if (e.getValue().equals(before)) continue;
-            Integer n = changes.get(e.getKey());
-            if (n != null && n > LEARN_MAX_CHANGES) continue;
-            learnFound.add(new String[] {e.getKey(), before == null ? "" : before, e.getValue()});
-        }
-        Collections.sort(learnFound, new Comparator<String[]>() {
-            @Override public int compare(String[] a, String[] b) {
-                Integer x = changes.get(a[0]), y = changes.get(b[0]);
-                return (x == null ? 0 : x) - (y == null ? 0 : y);
-            }
-        });
-        while (learnFound.size() > 5) learnFound.remove(learnFound.size() - 1);
-        String[] lines = new String[learnFound.size()];
-        for (int i = 0; i < lines.length; i++) {
-            String[] c = learnFound.get(i);
-            String[] id = c[0].split(":", 2);
-            lines[i] = "Code " + id[0] + " · " + id[1] + " : " + (c[1].isEmpty() ? "?" : c[1]) + " → " + c[2];
-        }
-        learnChoices = lines;
-        learnText = lines.length == 0
-            ? "Aucune donnée n'a changé : l'app CAN ne publie peut-être pas l'état des rétroviseurs. "
-                + "Le ruban garde les règles écran / portes."
-            : "Choisissez la donnée des rétroviseurs (en général la première) :";
-        if (lines.length == 0) learnStop(learnText);
-    }
-
-    private void learnPick(int index) {
-        if (index < 0 || index >= learnFound.size()) return;
-        String[] c = learnFound.get(index);
-        String[] id = c[0].split(":", 2);
-        try {
-            settings.mirrorCode = Integer.parseInt(id[0]);
-        } catch (NumberFormatException e) {
-            return;
-        }
-        settings.mirrorKey = id[1];
-        settings.mirrorOpen = c[1];
-        settings.mirrorFolded = c[2];
-        settings.save(this);
-        learnStop("Enregistré : code " + id[0] + " « " + id[1] + " » (dépliés " + (c[1].isEmpty() ? "autre" : c[1])
-            + ", repliés " + c[2] + ")");
-        mirrorsOpen = null;
-        applyMirrorSettings();
-        onMirrors(false);      // they are folded right now (step 2)
-    }
-
-    private void learnStop(String text) {
-        main.removeCallbacks(learnSnapshot);
-        main.removeCallbacks(learnTimeout);
-        doors.setLearning(false);
-        learnOpen = null;
-        learnFound.clear();
-        learnChoices = new String[0];
-        learnText = text;
     }
 
     // ---- helpers ----

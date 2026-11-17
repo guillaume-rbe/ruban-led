@@ -17,12 +17,12 @@ import android.util.Log;
 /**
  * Door state from the stock CAN app (com.xbs.canapp), READ-ONLY, the same way Binnacle's CanFeed
  * does it: the only binder calls are IMcuService transaction 1 (regPropIdList) and 2
- * (unregPropIdList), for codes 15, 9, 11 and the mirror's (all 0-127 while detecting the mirrors,
- * like Binnacle's logger). Nothing is ever sent to the MCU or the car.
+ * (unregPropIdList), for codes 15, 9 and 11. Nothing is ever sent to the MCU or the car.
  *
  * Code 15, key "doorval": 0x80 driver, 0x40 passenger, 0x20 rear right, 0x10 rear left,
  * 0x08 boot, 0x04 frunk. Code 9, keys "leftlight" / "rightlight": the indicators, 1 = lit,
- * 2 = off; they follow the actual flashing; "chargelight" = charging. Code 11: "jhmail" and
+ * 2 = off; they follow the actual flashing; "postlight" = the parking/welcome lights;
+ * "chargelight" = charging. Code 11: "jhmail" and
  * "batterylevel" for the battery % ({@link Battery}). (docs/FIELD_MAP.md in Binnacle.)
  */
 final class DoorFeed {
@@ -33,14 +33,12 @@ final class DoorFeed {
         /** Battery % (-1 unknown) and whether the car is charging (code 9 "chargelight"). */
         void onBattery(int percent, boolean charging);
         void onFeedState(String text);
-        /** The mirror field set up in the app: true unfolded, false folded. */
-        void onMirrors(boolean open);
+        /** Code 9 "postlight": the parking / welcome lights (they come on when the car unlocks). */
+        void onParkLights(boolean on);
     }
 
-    /** Codes always read; the mirror's code is added when it is set up. */
-    private static final int[] BASE_CODES = {15, 9, 11};
-    /** Codes left out of the mirror detection: sensors, speed/energy, tyres, unused range. */
-    private static final int[] NOISY = {3, 4, 10, 12, 18};
+    /** The only codes read: doors, lights, battery. */
+    private static final int[] CODES = {15, 9, 11};
 
     private static final String TAG = "rubanled";
     private static final String DESCRIPTOR = "com.mcu.iinterface.aidl.IMcuService";
@@ -60,16 +58,10 @@ final class DoorFeed {
     private volatile boolean running;
     private volatile IBinder binder;
     private boolean registered;
-    private boolean left, right, charging;
+    private boolean left, right, charging, park;
     private int percent = -1, jhmail = -1, batterylevel = -1;
     private final Battery battery = new Battery();
 
-    /** Mirror field (set from the settings) and the detection mode (all codes, every value kept). */
-    private volatile int mirrorCode = -1;
-    private volatile String mirrorKey = "", mirrorOpen = "", mirrorFolded = "";
-    private boolean learning;
-    final java.util.HashMap<String, String> learnValues = new java.util.HashMap<>();
-    final java.util.HashMap<String, Integer> learnChanges = new java.util.HashMap<>();
 
     /** looper: where messages and callbacks run (the service's high-priority thread). */
     DoorFeed(Context ctx, Listener listener, Looper looper) {
@@ -83,20 +75,15 @@ final class DoorFeed {
                 if (!running) return;
                 try {
                     Bundle b = msg.getData();
-                    if (learning) learn(msg.what, b);
-                    if (msg.what == mirrorCode && b.containsKey(mirrorKey)) {
-                        String val = String.valueOf(b.get(mirrorKey)).trim();
-                        if (!mirrorOpen.isEmpty() ? val.equals(mirrorOpen) : !val.equals(mirrorFolded)) {
-                            DoorFeed.this.listener.onMirrors(true);
-                        } else if (!mirrorFolded.isEmpty() ? val.equals(mirrorFolded) : !val.equals(mirrorOpen)) {
-                            DoorFeed.this.listener.onMirrors(false);
-                        }
-                        if (msg.what != CODE_DOORS && msg.what != CODE_LIGHTS && msg.what != CODE_BATTERY) return;
-                    }
                     if (msg.what == CODE_LIGHTS) {
                         left = lit(b, "leftlight", left);
                         right = lit(b, "rightlight", right);
                         DoorFeed.this.listener.onIndicators(left, right);
+                        if (b.containsKey("postlight")) {
+                            boolean was = park;
+                            park = lit(b, "postlight", park);
+                            if (park != was) DoorFeed.this.listener.onParkLights(park);
+                        }
                         if (b.containsKey("chargelight")) {
                             charging = lit(b, "chargelight", charging);
                             DoorFeed.this.listener.onBattery(percent, charging);
@@ -142,65 +129,6 @@ final class DoorFeed {
         if (o instanceof Boolean) return (Boolean) o;
         if (o instanceof String) return "1".equals(((String) o).trim()) || "true".equalsIgnoreCase(((String) o).trim());
         return def;
-    }
-
-    /** Values seen in detection mode: code:key -> last value, and how often each changed. */
-    private void learn(int code, Bundle b) {
-        for (int n : NOISY) if (n == code) return;
-        for (String k : b.keySet()) {
-            String id = code + ":" + k;
-            String v = String.valueOf(b.get(k)).trim();
-            String old = learnValues.put(id, v);
-            if (old != null && !old.equals(v)) {
-                Integer c = learnChanges.get(id);
-                learnChanges.put(id, c == null ? 1 : c + 1);
-            }
-        }
-    }
-
-    /** Sets the mirror field (from the settings); re-registers if the code list changes. */
-    void setMirror(int code, String key, String open, String folded) {
-        boolean changed = code != mirrorCode;
-        mirrorKey = key == null ? "" : key;
-        mirrorOpen = open == null ? "" : open;
-        mirrorFolded = folded == null ? "" : folded;
-        mirrorCode = code;
-        if (changed) reRegister();
-    }
-
-    /** Detection mode on: every code 0-127, values kept in learnValues (call on the looper). */
-    void setLearning(boolean on) {
-        if (on == learning) return;
-        learning = on;
-        learnValues.clear();
-        learnChanges.clear();
-        reRegister();
-    }
-
-    boolean isLearning() {
-        return learning;
-    }
-
-    private void reRegister() {
-        worker.post(new Runnable() {
-            @Override public void run() {
-                if (!running || binder == null) return;
-                unregister();
-                register();
-            }
-        });
-    }
-
-    private int[] codes() {
-        if (learning) {
-            int[] all = new int[128];
-            for (int i = 0; i < all.length; i++) all[i] = i;
-            return all;
-        }
-        int m = mirrorCode;
-        for (int c : BASE_CODES) if (c == m) m = -1;
-        if (m < 0) return BASE_CODES.clone();
-        return new int[] {BASE_CODES[0], BASE_CODES[1], BASE_CODES[2], m};
     }
 
     void start() {
@@ -288,7 +216,7 @@ final class DoorFeed {
             d.writeInterfaceToken(DESCRIPTOR);
             d.writeInt(1);
             messenger.writeToParcel(d, 0);
-            d.writeIntArray(codes());
+            d.writeIntArray(CODES.clone());
             Parcel r = call(TX_REGISTER, d);
             registered = r != null && r.readInt() != 0;
             if (r != null) r.recycle();

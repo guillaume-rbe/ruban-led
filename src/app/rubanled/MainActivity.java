@@ -43,10 +43,8 @@ public final class MainActivity extends Activity {
     private static final int WARN = 0xFFFFB300;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, mirrorLine, learnLine, eventsLine;
+    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine;
     private View linkDot;
-    private LinearLayout choices;
-    private String[] shownChoices = new String[0];
     private EditText address, blinkMs, blinkMax, repeat, nightWinter, nightSummer, nightEnd, nightPct;
     private static boolean askedBattery;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
@@ -86,25 +84,11 @@ public final class MainActivity extends Activity {
         status.addView(stripLine);
         status.addView(doorsLine);
         status.addView(ruleLine);
-        mirrorLine = text("", 15, MUTED, false);
-        status.addView(mirrorLine);
+        presenceLine = text("", 15, MUTED, false);
+        status.addView(presenceLine);
+        status.addView(text("Déverrouillage : animation d'allumage ×3 puis couleur permanente. Verrouillage : "
+            + "animation d'extinction ×3 puis ruban éteint (lu sur les clignotants de la voiture).", 14, MUTED, false));
 
-        LinearLayout mirrors = card(left, "Rétroviseurs");
-        mirrors.addView(text("Rétros dépliés : animation d'allumage ×3 puis couleur permanente. Rétros repliés : "
-            + "animation d'extinction ×3 puis ruban éteint, jauge de recharge masquée.", 14, MUTED, false));
-        mirrors.addView(text("Détection : rétros dépliés, touchez 1 ; repliez-les depuis l'écran de la Tesla, "
-            + "puis touchez 2 et choisissez la donnée qui a changé.", 14, MUTED, false));
-        LinearLayout mr = new LinearLayout(this);
-        mr.setPadding(0, dp(8), 0, 0);
-        mr.addView(action("1. Rétros dépliés", LedService.ACTION_LEARN_OPEN, true), weight(1, dp(8)));
-        mr.addView(action("2. Rétros repliés", LedService.ACTION_LEARN_FOLDED, true), weight(1, dp(8)));
-        mr.addView(action("Oublier", LedService.ACTION_MIRROR_FORGET, false), weight(0.6f, 0));
-        mirrors.addView(mr);
-        learnLine = text("", 15, WARN, false);
-        learnLine.setPadding(0, dp(8), 0, 0);
-        mirrors.addView(learnLine);
-        choices = column();
-        mirrors.addView(choices);
 
         LinearLayout colours = card(left, "Couleurs");
         colours.addView(new ColourPanel(LedService.TARGET_STEADY, "Permanente",
@@ -212,32 +196,8 @@ public final class MainActivity extends Activity {
             String rule = LedService.ruleText;
             ruleLine.setText(rule);
             ruleLine.setVisibility(rule.isEmpty() ? View.GONE : View.VISIBLE);
-            mirrorLine.setText(LedService.mirrorText);
-            String learn = LedService.learnText;
-            learnLine.setText(learn);
-            learnLine.setVisibility(learn.isEmpty() ? View.GONE : View.VISIBLE);
+            presenceLine.setText(LedService.presenceText);
             eventsLine.setText(LedService.eventsText.isEmpty() ? "—" : LedService.eventsText);
-            String[] c = LedService.learnChoices;
-            if (!java.util.Arrays.equals(c, shownChoices)) {
-                shownChoices = c;
-                choices.removeAllViews();
-                for (int i = 0; i < c.length; i++) {
-                    final int index = i;
-                    Button b = pill(c[i], i == 0);
-                    b.setOnClickListener(new View.OnClickListener() {
-                        @Override public void onClick(View v) {
-                            Intent pick = new Intent(MainActivity.this, LedService.class)
-                                .setAction(LedService.ACTION_LEARN_PICK).putExtra("index", index);
-                            if (Build.VERSION.SDK_INT >= 26) startForegroundService(pick);
-                            else startService(pick);
-                        }
-                    });
-                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                    lp.topMargin = dp(6);
-                    choices.addView(b, lp);
-                }
-            }
             main.postDelayed(this, 1000);
         }
     };

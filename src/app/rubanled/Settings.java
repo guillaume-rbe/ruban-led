@@ -36,15 +36,6 @@ final class Settings {
     int nightPct;
     int dayPct;
 
-    /**
-     * Mirrors (owner, 16 Nov): the CAN field that tells folded from unfolded, found by the app's
-     * detection (it isn't in Binnacle's field map). mirrorCode -1 = not set up.
-     * mirrorOpen / mirrorFolded: the field's value (as text) in each state; "" = any other value.
-     */
-    int mirrorCode;
-    String mirrorKey;
-    String mirrorOpen;
-    String mirrorFolded;
 
     static Settings load(Context ctx) {
         SharedPreferences p = prefs(ctx);
@@ -69,10 +60,6 @@ final class Settings {
         s.nightEnd = p.getInt("nightEnd5", 7);
         s.nightPct = p.getInt("nightPct5", 20);
         s.dayPct = p.getInt("dayPct", 100);
-        s.mirrorCode = p.getInt("mirrorCode", -1);
-        s.mirrorKey = p.getString("mirrorKey", "");
-        s.mirrorOpen = p.getString("mirrorOpen", "");
-        s.mirrorFolded = p.getString("mirrorFolded", "");
         return s;
     }
 
@@ -97,16 +84,7 @@ final class Settings {
             .putInt("nightEnd5", nightEnd)
             .putInt("nightPct5", nightPct)
             .putInt("dayPct", dayPct)
-            .putInt("mirrorCode", mirrorCode)
-            .putString("mirrorKey", mirrorKey)
-            .putString("mirrorOpen", mirrorOpen)
-            .putString("mirrorFolded", mirrorFolded)
             .apply();
-    }
-
-    boolean mirrorsSetUp() {
-        return mirrorCode >= 0 && mirrorKey != null && !mirrorKey.isEmpty()
-            && !(mirrorOpen.isEmpty() && mirrorFolded.isEmpty());
     }
 
     /** Night mode on and it's night now. */

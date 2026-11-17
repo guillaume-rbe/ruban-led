@@ -3,28 +3,33 @@
 Petite app Android pour l'écran ZIQI A007 (Tesla Model 3/Y) qui pilote en Bluetooth LE un ruban LED
 Zengge (app « ZENGGE », `com.zengge.blev2`) selon l'état des portes de la voiture.
 
-Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprès de l'app CAN d'origine
-(`com.xbs.canapp`, code 15 `doorval`, seules transactions `regPropIdList`/`unregPropIdList`, comme le
+Séparée de Binnacle : elle ne lit que les portes, les feux et la batterie, **en lecture seule**, auprès
+de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules transactions `regPropIdList`/`unregPropIdList`, comme le
 `CanFeed` de Binnacle). Rien n'est envoyé à la voiture ni au MCU.
 
 ## Ce qu'elle fait
 
-- **Rétroviseurs = présence** (si configurés, voir plus bas) : c'est le signe le plus fiable que
-  le propriétaire est là. Quand ils se déplient (il arrive), animation d'allumage jouée **3 fois**,
-  puis couleur permanente ; quand ils se replient (il part), animation d'extinction **3 fois**, puis
-  ruban éteint. Rétros repliés, rien ne s'allume (ni portes, ni warnings, ni jauge de recharge),
-  pour ne pas gaspiller d'énergie. Rétros dépliés, une porte qui s'ouvre fait clignoter le ruban.
-- **Animation d'entrée** (sans rétroviseurs configurés) : à la première porte ouverte après le réveil de la voiture (écran rallumé,
+- **Verrouillage = présence** : l'app lit la confirmation lumineuse de la Tesla sur les clignotants
+  (code 9). **Un flash** des deux clignotants = voiture verrouillée (le propriétaire part) :
+  animation d'extinction **3 fois**, puis ruban éteint. **Deux flashs**, ou les feux d'accueil
+  (`postlight`) qui s'allument = déverrouillée (il arrive) : animation d'allumage **3 fois** dans la
+  couleur permanente, puis couleur permanente. Verrouillée, rien ne s'allume (ni warnings, ni jauge
+  de recharge), pour ne pas gaspiller d'énergie. Une porte qui s'ouvre voiture « verrouillée » vaut
+  déverrouillage (il a été manqué). Déverrouillée, une porte qui s'ouvre fait clignoter le ruban.
+  Relevé le 17 nov. : verrouillage auto en s'éloignant ≈ 10 s après la fermeture de la porte ;
+  au retour, feux d'accueil puis deux flashs au moment où la porte s'ouvre. Il faut la
+  confirmation lumineuse du verrouillage activée dans les réglages Tesla.
+- **Animation d'entrée** (tant qu'aucun verrouillage n'a été vu depuis le réveil) : à la première porte ouverte après le réveil de la voiture (écran rallumé,
   ruban rebranché après plus d'une minute, démarrage de l'app), le ruban se remplit progressivement
   (~5 s, **3 fois**) dans la couleur permanente (ambiante), puis reste dessus. Les portes se remplissent de l'arrière vers l'avant ; le tableau de
   bord part des deux bouts.
 - **Clignotement** : ensuite, chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
   ouverte) fait clignoter le ruban (couleur d'alerte, rouge par défaut, 100 % ↔ 1 %, 400 ms, 2 min max).
 - **Après chaque animation** : toujours la couleur permanente (la jauge pendant la recharge), ou
-  ruban éteint si les rétros sont repliés.
-- **Warnings** : tant que les feux de détresse sont allumés (les deux clignotants allumés en même
-  temps dans le flux CAN, code 9), le ruban clignote dans la couleur d'alerte.
-- **Recharge** : pendant la charge (code 9 `chargelight`), et seulement rétros dépliés, le ruban
+  ruban éteint si la voiture est verrouillée.
+- **Warnings** : à partir de **3 flashs** de suite des deux clignotants (1 ou 2, c'est le
+  verrouillage), et tant qu'ils continuent, le ruban clignote dans la couleur d'alerte.
+- **Recharge** : pendant la charge (code 9 `chargelight`), et seulement voiture déverrouillée, le ruban
   devient une jauge verte du pourcentage de batterie (code 11, décodé comme Binnacle), remplie
   depuis la droite du tableau de bord, son extrémité pulsant.
 - **Veille** : quand l'écran s'éteint (voiture endormie), la lumière se retire progressivement
@@ -35,17 +40,14 @@ Séparée de Binnacle : elle ne lit que les portes, **en lecture seule**, auprè
   ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables.
 - **Deux couleurs** réglables dans l'app, chacune avec sa roue et sa jauge de luminosité :
   couleur permanente, et couleur d'alerte (rouge 100 % par défaut, réservée aux portes, coffre, frunk et warnings).
-- Écran sombre en cartes : état, rétroviseurs, couleurs, derniers événements (heure de chaque porte,
+- Écran sombre en cartes : état, présence, couleurs, derniers événements (heure de chaque porte,
   connexion du ruban… pour voir d'où vient un retard), actions, règles, ruban et mise à jour.
 
 ## Rétroviseurs
 
-L'état des rétroviseurs n'est pas dans la carte des champs de Binnacle : l'app le trouve elle-même.
-Carte « Rétroviseurs » : rétros dépliés, toucher **1** (l'app lit toutes les données de l'app CAN,
-codes 0–127, en lecture seule comme le logger de Binnacle) ; replier les rétros depuis l'écran de la
-Tesla, toucher **2** ; choisir la donnée qui a changé (la première en général). Elle est enregistrée
-et l'app ne lit ensuite que ce code en plus des portes. Si rien ne change, l'app CAN ne publie pas
-cet état : le ruban garde les règles écran / portes. « Oublier » efface le réglage.
+Abandonnés en 0.7 : l'app CAN d'origine ne publie pas leur état (enregistrement de tous les codes
+0–127 avec le logger de Binnacle le 17 nov., rétros repliés puis dépliés plusieurs fois : aucun champ
+n'a changé). Le verrouillage, lu sur les clignotants, les remplace.
 
 ## Priorité et réactivité
 
