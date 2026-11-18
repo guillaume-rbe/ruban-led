@@ -27,9 +27,6 @@ NOTES=$(awk -v v="## $NAME" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md
 if [ -z "$NOTES" ]; then
     echo "no \"## $NAME\" section in CHANGELOG.md: write what's new first"; exit 1
 fi
-NOTES="$NOTES
-
-Installée depuis l'app : bouton « Mise à jour »."
 
 bash build.sh
 sha256sum build/ruban-led.apk | cut -d' ' -f1 > build/ruban-led.apk.sha256
