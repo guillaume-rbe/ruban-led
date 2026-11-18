@@ -55,6 +55,9 @@ final class Updater {
     /** Set once the app's own socket was refused: every download then goes through Android's. */
     private boolean viaSystem;
     private static final long DM_TIMEOUT_MS = 180000;
+    /** Android's downloader given up after this long without a byte (waiting for a network). */
+    private static final long DM_STALL_MS = 30000;
+    private static final String NO_NETWORK = "pas de connexion Internet";
 
     Updater(Context ctx, Listener listener) {
         this.ctx = ctx.getApplicationContext();
@@ -77,8 +80,9 @@ final class Updater {
                     check();
                 } catch (Throwable t) {
                     Log.w(LOG, "update failed", t);
-                    status("Mise à jour impossible : " + t.getMessage()
-                        + (viaSystem ? " (même via le gestionnaire de téléchargements d'Android). "
+                    String msg = String.valueOf(t.getMessage());
+                    status("Mise à jour impossible : " + msg
+                        + (viaSystem && !msg.startsWith(NO_NETWORK) ?" (même via le gestionnaire de téléchargements d'Android). "
                             + "Redémarrer l'écran une fois corrige un accès réseau refusé." : ""));
                 }
             }
@@ -174,6 +178,8 @@ final class Updater {
             try {
                 return get(url, max);
             } catch (java.net.SocketException | java.net.UnknownHostException | SecurityException e) {
+                // also what no network looks like: Android's downloader then gives up quickly
+                // (it reports it waits for a network, or nothing arrives), see viaDownloadManager
                 Log.w(LOG, "own connection refused, using DownloadManager", e);
                 viaSystem = true;
                 // normal until the dash restarts once after an update that added the network
@@ -198,21 +204,32 @@ final class Updater {
             .addRequestHeader("Accept", "application/vnd.github+json, application/octet-stream");
         long id = dm.enqueue(r);
         try {
-            long until = System.currentTimeMillis() + DM_TIMEOUT_MS;
+            long now = System.currentTimeMillis();
+            long until = now + DM_TIMEOUT_MS, lastProgress = now, lastBytes = -1;
             while (true) {
                 Cursor c = dm.query(new DownloadManager.Query().setFilterById(id));
                 int st = -1, reason = 0;
+                long bytes = 0;
                 try {
                     if (c != null && c.moveToFirst()) {
                         st = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS));
                         reason = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON));
+                        bytes = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
                     }
                 } finally {
                     if (c != null) c.close();
                 }
+                now = System.currentTimeMillis();
+                if (bytes != lastBytes) { lastBytes = bytes; lastProgress = now; }
                 if (st == DownloadManager.STATUS_SUCCESSFUL) break;
                 if (st == DownloadManager.STATUS_FAILED || st == -1) throw new Exception("téléchargement Android en échec (" + reason + ")");
-                if (System.currentTimeMillis() > until) throw new Exception("téléchargement trop long");
+                // without a network Android just waits for one (paused, or pending): give up
+                if (st == DownloadManager.STATUS_PAUSED
+                        && (reason == DownloadManager.PAUSED_WAITING_FOR_NETWORK
+                            || reason == DownloadManager.PAUSED_QUEUED_FOR_WIFI)
+                        && now - lastProgress > 5000) throw new Exception(NO_NETWORK);
+                if (now - lastProgress > DM_STALL_MS) throw new Exception(NO_NETWORK + " (aucune donnée reçue)");
+                if (now > until) throw new Exception("téléchargement trop long");
                 Thread.sleep(400);
             }
             if (file.length() > max) throw new Exception("fichier trop gros");
