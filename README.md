@@ -60,8 +60,11 @@ Documentation :
 - **Warnings** : à partir de **3 flashs** de suite des deux clignotants (1 ou 2, c'est le
   verrouillage), et tant qu'ils continuent, le ruban clignote dans la couleur d'alerte.
 - **Recharge** : pendant la charge (code 9 `chargelight`), et seulement voiture déverrouillée, le ruban
-  devient une jauge verte du pourcentage de batterie (code 11, décodé comme Binnacle), remplie
-  depuis la droite du tableau de bord, son extrémité pulsant.
+  devient une jauge verte du pourcentage de batterie (code 11, décodé comme Binnacle) : une barre
+  fixe au milieu du tableau de bord, aussi large que le % (50 % = la moitié du tableau de bord),
+  et de chaque bout un remplissage vert qui court vers elle, en boucle (~5 s). Sur les portes,
+  c'est un remplissage de l'arrière vers l'avant qui finit dans la barre (à l'avant de la porte) ;
+  à 100 % tout est vert fixe.
 - **Veille** : quand l'écran s'éteint (voiture endormie), le ruban s'éteint, sans animation
   (en général il l'est déjà depuis le verrouillage). Utile car il est alimenté par
   l'USB de la boîte à gants, qui reste alimenté tant que la voiture est éveillée (Sentinelle

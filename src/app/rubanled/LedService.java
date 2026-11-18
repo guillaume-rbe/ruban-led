@@ -115,9 +115,15 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private boolean charging;
     private int soc = -1;
     private boolean gauge;
-    private boolean gaugeTip;
+    /**
+     * Gauge (owner, 18 Nov): a steady green bar of the battery % in the middle of the dashboard,
+     * and from both ends of the dashboard a green fill running towards it, over and over. The
+     * right one (segment 1 upwards) is a back-to-front sweep on the doors, which end in the bar.
+     */
+    private int gaugeFrame;
     private static final int GAUGE_HUE = 120;
-    private static final long GAUGE_TICK_MS = 800;
+    private static final long GAUGE_FRAME_MS = 170;
+    private static final int GAUGE_FILL_FRAMES = 22, GAUGE_HOLD_FRAMES = 4, GAUGE_GAP_FRAMES = 3;
 
     /** Exit animation: the light withdraws, then the strip is off. */
     private boolean screenIsOn = true;
@@ -771,7 +777,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (blinking || intro || !link.isReady() || !present()) return;
         exiting = false;
         main.removeCallbacks(exitTick);
-        if (!gauge) power(true);
+        if (!gauge) { power(true); gaugeFrame = 0; }
         gauge = true;
         ruleText = "Recharge : jauge de batterie";
         main.removeCallbacks(gaugeTick);
@@ -781,16 +787,30 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable gaugeTick = new Runnable() {
         @Override public void run() {
             if (!gauge) return;
-            gaugeTip = !gaugeTip;
             int pct = targetPct();
-            // segment 1 is at the right end of the dashboard (and the back of the doors)
-            int lit = soc < 0 ? VISIBLE_SEGMENTS : Math.max(1, Math.round(soc * VISIBLE_SEGMENTS / 100f));
+            // segment 1 is at the right end of the dashboard (and the back of the doors), 15 at
+            // its left end; the bar is centred on segment 8, the middle of the dashboard
+            int bar = soc < 0 ? 0 : Math.max(1, Math.round(soc * VISIBLE_SEGMENTS / 100f));
+            int right = (VISIBLE_SEGMENTS - bar) / 2;          // segments 1..right: fill upwards
+            int left = VISIBLE_SEGMENTS - bar - right;         // the last `left` ones: fill downwards
+            int cycle = GAUGE_FILL_FRAMES + GAUGE_HOLD_FRAMES + GAUGE_GAP_FRAMES;
+            int frame = gaugeFrame % cycle;
+            double t = frame >= GAUGE_FILL_FRAMES + GAUGE_HOLD_FRAMES ? -1    // gap: sides dark
+                    : Math.min(frame, GAUGE_FILL_FRAMES - 1) * (1 + INTRO_FADE) / (GAUGE_FILL_FRAMES - 1);
             int[] vals = new int[Zengge.SEGMENTS];
-            for (int i = 0; i < VISIBLE_SEGMENTS && i < lit; i++) vals[i] = pct;
-            if (lit < VISIBLE_SEGMENTS || soc < 100) vals[lit - 1] = gaugeTip ? pct : Math.max(1, pct / 4);
+            for (int i = 0; i < vals.length; i++) {
+                if (i >= VISIBLE_SEGMENTS) { vals[i] = pct; continue; }   // not shown anywhere
+                int k, n;                                 // k-th of n from the outer end of its side
+                if (i < right) { k = i; n = right; }
+                else if (i >= VISIBLE_SEGMENTS - left) { k = VISIBLE_SEGMENTS - 1 - i; n = left; }
+                else { vals[i] = pct; continue; }        // the bar
+                double f = (t - (double) k / n) / INTRO_FADE;
+                vals[i] = f <= 0 ? 0 : f >= 1 ? pct : (int) Math.round(pct * f);
+            }
             link.send(Zengge.levels(GAUGE_HUE, 100, vals));
             lastSentMs = SystemClock.elapsedRealtime();
-            main.postDelayed(this, GAUGE_TICK_MS);
+            gaugeFrame++;
+            main.postDelayed(this, GAUGE_FRAME_MS);
         }
     };
 
