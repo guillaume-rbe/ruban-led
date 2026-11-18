@@ -2,8 +2,9 @@
 # Publishes the app as a GitHub release of guillaume-rbe/ruban-led, which the app's "Mise à jour"
 # button installs.
 #   1. bump android:versionCode (and versionName) in AndroidManifest.xml
-#   2. commit and push main
-#   3. bash release.sh
+#   2. write its "## <versionName>" section in CHANGELOG.md (the release's text, in French)
+#   3. commit and push main
+#   4. bash release.sh
 # The release is tagged ruban-led-v<versionCode> (the app looks for that prefix) and marked "latest", and
 # carries ruban-led.apk and its SHA-256. Always sign with the same key (this PC's debug keystore),
 # or Android refuses the update.
@@ -21,11 +22,20 @@ if "$GH" release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
     echo "$TAG already exists: bump android:versionCode first"; exit 1
 fi
 
+# the release's text: this version's section of CHANGELOG.md, up to the next "## "
+NOTES=$(awk -v v="## $NAME" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md | sed '/./,$!d')
+if [ -z "$NOTES" ]; then
+    echo "no \"## $NAME\" section in CHANGELOG.md: write what's new first"; exit 1
+fi
+NOTES="$NOTES
+
+Installée depuis l'app : bouton « Mise à jour »."
+
 bash build.sh
 sha256sum build/ruban-led.apk | cut -d' ' -f1 > build/ruban-led.apk.sha256
 
 "$GH" release create "$TAG" build/ruban-led.apk build/ruban-led.apk.sha256 \
     --repo "$REPO" --target main --latest \
     --title "Ruban LED $NAME" \
-    --notes "Ruban LED $NAME (versionCode $CODE). Installée depuis l'app : bouton « Mise à jour »."
+    --notes "$NOTES"
 echo "published $TAG"

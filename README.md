@@ -158,8 +158,9 @@ L'avertissement de Google Play Protect (« application non sûre ») à chaque m
 que l'app n'est pas sur le Play Store : « Installer quand même », ou couper l'analyse de Play Protect
 dans le Play Store.
 
-Publier une version : augmenter `android:versionCode` dans `AndroidManifest.xml`, pousser `main`,
-puis `bash release.sh` (crée la release avec `gh` et la marque « latest »).
+Publier une version : augmenter `android:versionCode` dans `AndroidManifest.xml`, écrire ses
+nouveautés dans [CHANGELOG.md](CHANGELOG.md) (section `## <versionName>`), pousser `main`, puis
+`bash release.sh` (crée la release avec `gh`, avec ces nouveautés pour texte, et la marque « latest »).
 
 ## Licence et crédits
 
