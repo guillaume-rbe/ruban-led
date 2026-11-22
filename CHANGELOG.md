@@ -2,6 +2,10 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.19
+
+- **Écran : GPS coupé et alerte Google masquée** (option, activée par défaut) : à chaque démarrage, Ruban LED coupe le GPS de l'écran (aucun module branché) et refuse les notifications de Google Play Services, d'où venait l'alerte « L'accès à la position de l'appareil étant désactivé… » à chaque redémarrage. La Position reste activée : CarPlay sans fil en a besoin. Passe par l'ADB réseau de l'écran, comme Binnacle ; le résultat (avant / après) est noté dans « Derniers événements ». Désactiver l'option remet le GPS et les notifications de Google.
+
 ## 0.18
 
 - **Plus réactif** : les images d'animation ne s'accumulent plus quand le Bluetooth ralentit (la plus récente remplace celle qui attend), pause entre deux envois réduite (40 → 8 ms, le ruban accuse réception), ruban prêt dès que ses notifications sont activées, et plus d'« allumer » inutile avant le clignotement d'une porte (il part un envoi plus tôt).

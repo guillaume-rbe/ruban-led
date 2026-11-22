@@ -276,6 +276,9 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         link.start(settings.address);
         doors.start();
         main.post(nightCheck);
+        unitThread.start();
+        unit = new android.os.Handler(unitThread.getLooper());
+        unitApply(0);
         IntentFilter screen = new IntentFilter(Intent.ACTION_SCREEN_ON);
         screen.addAction(Intent.ACTION_SCREEN_OFF);
         registerReceiver(screenOn, screen, null, main);
@@ -322,6 +325,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             lastNight = null;          // re-apply the brightness rule with the new hours
             main.removeCallbacks(nightCheck);
             main.post(nightCheck);
+            unitApply(0);              // the dash switch may have changed
         } else if (ACTION_TEST_BLINK.equals(a)) {
             startBlink(TEST_BLINK_SEC);
         } else if (ACTION_ON.equals(a)) {
@@ -364,6 +368,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     @Override public void onDestroy() {
         main.removeCallbacksAndMessages(null);
+        unit.removeCallbacksAndMessages(null);
+        unitThread.quitSafely();
         try { unregisterReceiver(screenOn); } catch (Throwable ignored) {}
         autoPlay.stop();
         doors.stop();
@@ -682,6 +688,53 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             colour(strip.hue, strip.sat, pct, true);
             Log.i(TAG, "brightness " + pct + "%");
         }
+    }
+
+    // ---- the dash itself (0.19) ----
+
+    /** Commands on the dash run here: they block (a socket to its ADB). */
+    private final HandlerThread unitThread = new HandlerThread("unit-shell");
+    private android.os.Handler unit;
+    /** At start-up the dash's ADB may not be up yet: try again this often, this many times. */
+    private static final long UNIT_RETRY_MS = 20000;
+    private static final int UNIT_TRIES = 9;
+
+    /**
+     * Owner, 22 Nov: the dash's GPS off (no module plugged in) and Google Play services' alerts
+     * refused ("Find My Device" warning at every start), at every start of the app (the firmware
+     * resets some settings at boot). Turned off in the app: both put back. Location as a whole
+     * stays on, wireless CarPlay needs it.
+     */
+    private void unitApply(final int attempt) {
+        unit.removeCallbacksAndMessages(null);
+        unit.postDelayed(new Runnable() {
+            @Override public void run() {
+                boolean want = settings.unitQuiet;
+                boolean applied = Settings.loadUnitApplied(LedService.this);
+                if (!want && !applied) return;               // never touched: nothing to do
+                try {
+                    String before = UnitShell.run(UnitShell.Command.STATE);
+                    if (want) {
+                        UnitShell.run(UnitShell.Command.GPS_OFF);
+                        UnitShell.run(UnitShell.Command.GOOGLE_ALERTS_OFF);
+                    } else {
+                        UnitShell.run(UnitShell.Command.GPS_ON);
+                        UnitShell.run(UnitShell.Command.GOOGLE_ALERTS_ON);
+                    }
+                    Settings.saveUnitApplied(LedService.this, want);
+                    final String after = UnitShell.run(UnitShell.Command.STATE);
+                    final String line = (want ? "Écran : GPS coupé, alertes Google masquées" : "Écran : GPS et alertes Google rétablis")
+                        + " (avant " + before + " ; après " + after + ")";
+                    main.post(new Runnable() { @Override public void run() { event(line); } });
+                } catch (final Throwable t) {
+                    Log.w(TAG, "unit shell", t);
+                    if (attempt + 1 < UNIT_TRIES) { unitApply(attempt + 1); return; }
+                    main.post(new Runnable() {
+                        @Override public void run() { event("Écran : réglage GPS / alertes impossible (" + t.getMessage() + ")"); }
+                    });
+                }
+            }
+        }, attempt == 0 ? 3000 : UNIT_RETRY_MS);
     }
 
     // ---- short colour command check (0.18) ----

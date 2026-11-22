@@ -38,6 +38,11 @@ final class Settings {
     boolean reverseWhite;
     /** Short colour command (0.18): -1 not checked on this strip yet, 0 not understood, 1 works. */
     int shortColour;
+    /**
+     * Dash (0.19, owner 22 Nov): GPS provider off and Google Play services' alerts refused, applied
+     * through the dash's own ADB at every start (UnitShell). Location as a whole stays on (CarPlay).
+     */
+    boolean unitQuiet;
     int holdChance;
     /**
      * Night mode, on by default (owner, 16 Nov): from nightStartWinter (19 h) in winter time and
@@ -72,6 +77,7 @@ final class Settings {
         s.apFlash = p.getBoolean("apFlash", true);
         s.reverseWhite = p.getBoolean("reverseWhite", true);
         s.shortColour = p.getInt("shortColour", -1);
+        s.unitQuiet = p.getBoolean("unitQuiet", true);
         s.holdChance = p.getInt("holdChance", 4);
         // new keys in 0.5 so the new defaults (on, 20 %) apply to installs that had it off
         s.night = p.getBoolean("night5", true);
@@ -103,6 +109,7 @@ final class Settings {
             .putBoolean("apFlash", apFlash)
             .putBoolean("reverseWhite", reverseWhite)
             .putInt("shortColour", shortColour)
+            .putBoolean("unitQuiet", unitQuiet)
             .putInt("holdChance", holdChance)
             .putBoolean("night5", night)
             .putInt("nightStartWinter", nightStartWinter)
@@ -166,6 +173,15 @@ final class Settings {
 
     static void savePresence(Context ctx, Boolean there) {
         prefs(ctx).edit().putInt("presence", there == null ? -1 : there ? 1 : 0).apply();
+    }
+
+    /** unitQuiet was applied on the dash (so turning it off puts things back), kept apart from save(). */
+    static boolean loadUnitApplied(Context ctx) {
+        return prefs(ctx).getBoolean("unitApplied", false);
+    }
+
+    static void saveUnitApplied(Context ctx, boolean applied) {
+        prefs(ctx).edit().putBoolean("unitApplied", applied).apply();
     }
 
     private static SharedPreferences prefs(Context ctx) {

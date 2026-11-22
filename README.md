@@ -115,6 +115,21 @@ Abandonnés en 0.7 : l'app CAN d'origine ne publie pas leur état (enregistremen
 n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails dans
 [docs/DONNEES-CAN.md](docs/DONNEES-CAN.md).
 
+## Réglages de l'écran (0.19)
+
+Option « Écran : GPS coupé et alertes Google masquées » (activée par défaut) : à chaque démarrage,
+l'app lance par l'ADB réseau de l'écran (127.0.0.1:5555, sans authentification sur cet écran, comme
+Binnacle) une liste **fixe** de commandes, jamais une commande venue de l'extérieur :
+
+| Quoi | Commande | Annuler |
+|---|---|---|
+| GPS coupé (pas de module branché) | `settings put secure location_providers_allowed -gps` | `… +gps` |
+| Alerte « accès à la position désactivé » (Localiser mon appareil) | `appops set com.google.android.gms POST_NOTIFICATION ignore` | `… allow` |
+
+La Position reste activée : le Wi-Fi Direct de CarPlay sans fil en a besoin sur Android 10. Désactiver
+l'option remet les deux. Le résultat est noté dans « Derniers événements » avec l'état avant / après.
+Ça masque aussi les autres notifications de Google Play Services (inutiles sur l'écran).
+
 ## Priorité et réactivité
 
 - Les règles tournent sur leur propre fil de priorité haute (plus sur le fil de l'écran), le fil
