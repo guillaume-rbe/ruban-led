@@ -303,6 +303,7 @@ final class Journal {
         body.delete();
         if (code == 201 || code == 204) return name + " (" + kb(size) + ")";
         if (code == 400) throw new IOException("certificat refusé par le serveur (400)");
+        if (code == 403) throw new IOException("serveur fermé : activer « Journaux Ruban LED » dans Home Assistant (403)");
         if (code == 429) throw new IOException("trop d'envois, réessayer dans une minute (429)");
         if (code == 413) throw new IOException("journal trop gros pour le serveur (413)");
         throw new IOException("réponse " + code + " du serveur");
