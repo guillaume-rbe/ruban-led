@@ -117,8 +117,8 @@ n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails da
 
 ## Journaux (0.20)
 
-Pour déboguer sans recompiler l'app : un journal large, gardé sur l'écran **7 jours et 20 Mo au
-plus** (fichier par jour dans le stockage privé de l'app, le plus ancien supprimé en premier), une
+Pour déboguer sans recompiler l'app : un journal large, gardé sur l'écran **7 jours et 150 Mo au
+plus** (une semaine avec de longs trajets en journal détaillé) (fichier par jour dans le stockage privé de l'app, le plus ancien supprimé en premier), une
 ligne par fait : `HH:mm:ss.SSS ÉTIQUETTE message`.
 
 | Étiquette | Contenu |
@@ -136,8 +136,8 @@ enregistrés tels quels (abonnement en lecture seule, comme les autres).
 
 **Envoi** : bouton « Envoyer les journaux (24 h) » ou « Tout (7 jours) ». Chaque étape s'affiche
 (certificat, lecture, compression, connexion, envoi avec barre d'avancement, réponse), ✓ ou ✗ avec
-la raison. Le fichier part en `PUT` HTTPS, en gzip (2 Mo au plus : les lignes les plus anciennes sont
-retirées si besoin), avec en tête l'état de l'app, ses réglages (sans l'adresse du ruban) et son
+la raison. Le fichier part en `PUT` HTTPS, en gzip (20 Mo au plus, soit 150 à 200 Mo de texte, préparé dans un fichier
+temporaire et envoyé en flux ; au-delà, les jours les plus anciens sont retirés), avec en tête l'état de l'app, ses réglages (sans l'adresse du ruban) et son
 logcat. L'adresse du serveur et le certificat client sont dans le stockage privé de l'app
 (`files/journaux.conf` : `url=…` et `password=…`, `files/client.p12`), posés par ADB : rien de
 tout cela n'est dans ce dépôt. Côté serveur, il suffit d'accepter un `PUT` sur
