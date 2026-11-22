@@ -134,17 +134,46 @@ final class Journal {
 
     /** Days kept: DAYS, and MAX_BYTES in all (the oldest file goes first). Journal thread. */
     private void prune() {
-        File[] files = sorted();
-        long cutoff = System.currentTimeMillis() - DAYS * 24L * 3600 * 1000;
+        // by the date in the name, not the last write: today and the DAYS-1 days before, so never
+        // more than DAYS files (owner, 23 Nov); today's file is never deleted
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        String today = day(c);
+        c.add(java.util.Calendar.DAY_OF_MONTH, -(DAYS - 1));
+        String oldest = day(c);
+        File[] files = sorted();                      // "yyyy-MM-dd.log": oldest first
         long total = 0;
         for (File f : files) total += f.length();
+        int kept = 0;
         for (File f : files) {
-            if (f.lastModified() < cutoff || total > MAX_BYTES) {
+            String name = f.getName();
+            boolean dayFile = name.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}[.]log");
+            boolean old = !dayFile || name.substring(0, 10).compareTo(oldest) < 0;
+            boolean isToday = dayFile && name.startsWith(today);
+            if (!isToday && (old || total > MAX_BYTES)) {
                 total -= f.length();
-                f.delete();
+                if (f.delete()) log("APP", "journal : " + name + " supprimé" + (old ? " (plus de " + DAYS + " jours)" : " (plus de " + (MAX_BYTES >> 20) + " Mo)"));
+            } else {
+                kept++;
             }
         }
-        h.postDelayed(new Runnable() { @Override public void run() { prune(); } }, 3600 * 1000L);
+        // the upload's temporary file, if one was left by a failed send
+        new File(ctx.getCacheDir(), "envoi.log.gz").delete();
+        // again in an hour, and right after midnight so a new day never makes DAYS + 1
+        long toMidnight = 24L * 3600 * 1000 - (System.currentTimeMillis() - midnight());
+        h.postDelayed(new Runnable() { @Override public void run() { prune(); } }, Math.min(3600 * 1000L, toMidnight + 5000));
+    }
+
+    private String day(java.util.Calendar c) {
+        synchronized (day) { return day.format(c.getTime()); }
+    }
+
+    private static long midnight() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        c.set(java.util.Calendar.MINUTE, 0);
+        c.set(java.util.Calendar.SECOND, 0);
+        c.set(java.util.Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
     }
 
     /** Journal files, oldest first. */
