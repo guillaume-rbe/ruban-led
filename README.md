@@ -118,16 +118,7 @@ n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails da
 ## Priorité et réactivité
 
 - Les règles tournent sur leur propre fil de priorité haute (plus sur le fil de l'écran), le fil
-  Bluetooth aussi ; la connexion BLE est en intervalle court (demandé dès la connexion) et se refait
-  toutes les 2,5 s.
-- **Pas de retard qui s'accumule** (0.17) : une image d'animation qui attend encore son envoi est
-  remplacée par la suivante au lieu d'être envoyée après (seule la plus récente compte), donc le
-  ruban n'a jamais plus d'une image de retard, même si le Bluetooth ralentit.
-- Le ruban accuse réception de chaque commande : la pause entre deux envois est passée de 40 à
-  8 ms. Le ruban est prêt dès que ses notifications sont activées (plus d'attente fixe de 300 ms).
-- « Allumer » n'est plus envoyé quand le ruban est déjà allumé : une porte qui s'ouvre clignote un
-  aller-retour Bluetooth plus tôt. Après une perte de connexion, l'état du ruban est redemandé et le
-  premier envoi le rallume quoi qu'il arrive.
+  Bluetooth aussi ; la connexion BLE est en intervalle court et se refait toutes les 2,5 s.
 - Service au premier plan (notification « Ruban LED actif »), relancé au démarrage, après une mise à
   jour et toutes les 15 min s'il a été arrêté ; le processeur reste éveillé pendant les animations.
 - Au premier lancement, Android demande de laisser l'app hors de l'optimisation de la batterie :
