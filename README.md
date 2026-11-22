@@ -117,18 +117,20 @@ n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails da
 
 ## Réglages de l'écran (0.19)
 
-Option « Écran : GPS coupé et alertes Google masquées » (activée par défaut) : à chaque démarrage,
-l'app lance par l'ADB réseau de l'écran (127.0.0.1:5555, sans authentification sur cet écran, comme
-Binnacle) une liste **fixe** de commandes, jamais une commande venue de l'extérieur :
+Option « Écran : position sans GPS (plus d'alerte Google) » (activée par défaut) : à chaque
+démarrage, l'app lance par l'ADB réseau de l'écran (127.0.0.1:5555, sans authentification sur cet
+écran, comme Binnacle) une liste **fixe** de commandes, jamais une commande venue de l'extérieur :
 
 | Quoi | Commande | Annuler |
 |---|---|---|
-| GPS coupé (pas de module branché) | `settings put secure location_providers_allowed -gps` | `… +gps` |
-| Alerte « accès à la position désactivé » (Localiser mon appareil) | `appops set com.google.android.gms POST_NOTIFICATION ignore` | `… allow` |
+| Position en mode réseau seul, GPS retiré | `settings put secure location_mode 2` puis `location_providers_allowed -gps` | le mode d'avant, gardé par l'app (`settings put secure location_mode <0-3>`) |
 
-La Position reste activée : le Wi-Fi Direct de CarPlay sans fil en a besoin sur Android 10. Désactiver
-l'option remet les deux. Le résultat est noté dans « Derniers événements » avec l'état avant / après.
-Ça masque aussi les autres notifications de Google Play Services (inutiles sur l'écran).
+Pourquoi : la fenêtre de Google « L'accès à la position de l'appareil étant désactivé… »
+(Localiser mon appareil, *Fermer / Activer la localisation*) s'affichait à chaque démarrage parce que
+la Position était coupée. Aucun module GPS n'est branché, et la précision de la localisation Google
+est coupée (pas de scans Wi-Fi), donc ce mode ne localise pas vraiment l'écran ; il évite juste la
+fenêtre. L'état avant / après et l'écran au premier plan ~45 s après le démarrage sont notés dans
+« Derniers événements » (pour nommer la fenêtre si elle revenait).
 
 ## Priorité et réactivité
 

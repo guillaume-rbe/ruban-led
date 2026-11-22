@@ -4,7 +4,7 @@ Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la re
 
 ## 0.19
 
-- **Écran : GPS coupé et alerte Google masquée** (option, activée par défaut) : à chaque démarrage, Ruban LED coupe le GPS de l'écran (aucun module branché) et refuse les notifications de Google Play Services, d'où venait l'alerte « L'accès à la position de l'appareil étant désactivé… » à chaque redémarrage. La Position reste activée : CarPlay sans fil en a besoin. Passe par l'ADB réseau de l'écran, comme Binnacle ; le résultat (avant / après) est noté dans « Derniers événements ». Désactiver l'option remet le GPS et les notifications de Google.
+- **Plus de fenêtre « accès à la position désactivé » au démarrage** (option, activée par défaut) : cette fenêtre de Google (Localiser mon appareil, « Fermer / Activer la localisation ») venait de la Position coupée. À chaque démarrage, Ruban LED met la Position de l'écran en **mode réseau seul, sans GPS** (aucun module n'est branché ; la précision de la localisation Google étant coupée, pas de scans Wi-Fi non plus). Passe par l'ADB réseau de l'écran, comme Binnacle ; l'état avant / après et l'écran au premier plan un peu après le démarrage sont notés dans « Derniers événements ». Désactiver l'option remet le mode d'avant.
 
 ## 0.18
 

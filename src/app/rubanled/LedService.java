@@ -700,10 +700,11 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private static final int UNIT_TRIES = 9;
 
     /**
-     * Owner, 22 Nov: the dash's GPS off (no module plugged in) and Google Play services' alerts
-     * refused ("Find My Device" warning at every start), at every start of the app (the firmware
-     * resets some settings at boot). Turned off in the app: both put back. Location as a whole
-     * stays on, wireless CarPlay needs it.
+     * Owner, 22 Nov: Google's "location off" popup at every start (Find My Device: Fermer /
+     * Activer la localisation). Location goes on in network-only mode, without GPS (no module
+     * plugged in), at every start of the app (the firmware may reset it at boot). Turned off in the
+     * app: the mode the dash had before is put back. The screen in front is logged again a bit
+     * later, to name the popup if it still shows.
      */
     private void unitApply(final int attempt) {
         unit.removeCallbacksAndMessages(null);
@@ -715,17 +716,18 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 try {
                     String before = UnitShell.run(UnitShell.Command.STATE);
                     if (want) {
-                        UnitShell.run(UnitShell.Command.GPS_OFF);
-                        UnitShell.run(UnitShell.Command.GOOGLE_ALERTS_OFF);
+                        if (!applied) Settings.saveUnitModeBefore(LedService.this, modeOf(before));
+                        UnitShell.run(UnitShell.Command.LOCATION_NETWORK_ONLY);
                     } else {
-                        UnitShell.run(UnitShell.Command.GPS_ON);
-                        UnitShell.run(UnitShell.Command.GOOGLE_ALERTS_ON);
+                        int old = Settings.loadUnitModeBefore(LedService.this);
+                        if (old >= 0) UnitShell.run(UnitShell.Command.LOCATION_MODE, old);
                     }
                     Settings.saveUnitApplied(LedService.this, want);
                     final String after = UnitShell.run(UnitShell.Command.STATE);
-                    final String line = (want ? "Écran : GPS coupé, alertes Google masquées" : "Écran : GPS et alertes Google rétablis")
+                    final String line = (want ? "Écran : position réseau seule, sans GPS" : "Écran : position remise comme avant")
                         + " (avant " + before + " ; après " + after + ")";
                     main.post(new Runnable() { @Override public void run() { event(line); } });
+                    if (want && attempt == 0) unitLogLater(45000);
                 } catch (final Throwable t) {
                     Log.w(TAG, "unit shell", t);
                     if (attempt + 1 < UNIT_TRIES) { unitApply(attempt + 1); return; }
@@ -735,6 +737,28 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 }
             }
         }, attempt == 0 ? 3000 : UNIT_RETRY_MS);
+    }
+
+    /** Mode in a STATE line ("mode=2 ..."), -1 if not readable. */
+    private static int modeOf(String state) {
+        try {
+            int i = state.indexOf("mode=");
+            return i < 0 ? -1 : Integer.parseInt(state.substring(i + 5, i + 6));
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /** The state and the screen in front, once, a bit after start-up (the popup came at start). */
+    private void unitLogLater(long delayMs) {
+        unit.postDelayed(new Runnable() {
+            @Override public void run() {
+                try {
+                    final String now = UnitShell.run(UnitShell.Command.STATE);
+                    main.post(new Runnable() { @Override public void run() { event("Écran après démarrage : " + now); } });
+                } catch (Throwable ignored) {}
+            }
+        }, delayMs);
     }
 
     // ---- short colour command check (0.18) ----

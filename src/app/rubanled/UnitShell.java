@@ -24,27 +24,36 @@ final class UnitShell {
     static final String OK = "RUBAN_OK";
 
     enum Command {
-        /** What the dash has now, for the log: location mode, providers, Google's notification right. */
+        /**
+         * What the dash has now, for the log: location mode (0 off, 1 GPS only, 2 network only,
+         * 3 high accuracy), providers, and the screen in front (to name the popup if it still shows).
+         */
         STATE("echo mode=$(settings get secure location_mode) fournisseurs=$(settings get secure location_providers_allowed)"
-            + " alertes=$(appops get com.google.android.gms POST_NOTIFICATION | tr -d '\\n'); echo " + OK),
+            + " devant=$(dumpsys activity activities | grep -m1 mResumedActivity | sed 's/.* u0 //; s/ .*//'); echo " + OK),
         /**
-         * Owner, 22 Nov: no GPS module is plugged in and the dash's position isn't used, so the GPS
-         * provider is turned off. Location as a whole stays on: wireless CarPlay's Wi-Fi Direct needs
-         * it on Android 10. Undo: settings put secure location_providers_allowed +gps
+         * Owner, 22 Nov: Google's "Find My Device" popup at every start ("L'accès à la position de
+         * l'appareil étant désactivé…", Fermer / Activer la localisation) comes from location being
+         * off. No GPS module is plugged in, so location goes on in network-only mode (2): no GPS,
+         * and with Google Location Accuracy off (Binnacle's UNIT-CHANGES) no Wi-Fi scans either.
+         * The GPS provider is also removed explicitly. Undo: LOCATION_MODE with the old mode.
          */
-        GPS_OFF("settings put secure location_providers_allowed -gps && echo " + OK),
-        GPS_ON("settings put secure location_providers_allowed +gps && echo " + OK),
-        /**
-         * Owner, 22 Nov: Google Play services' "Find My Device" warning at every start ("L'accès à la
-         * position de l'appareil étant désactivé…"). Its notifications are refused (Play services'
-         * own POST_NOTIFICATION app-op), useless on a dash fixed in the car.
-         * Undo: appops set com.google.android.gms POST_NOTIFICATION allow
-         */
-        GOOGLE_ALERTS_OFF("appops set com.google.android.gms POST_NOTIFICATION ignore && echo " + OK),
-        GOOGLE_ALERTS_ON("appops set com.google.android.gms POST_NOTIFICATION allow && echo " + OK);
+        LOCATION_NETWORK_ONLY("settings put secure location_mode 2 && settings put secure location_providers_allowed -gps && echo " + OK),
+        /** Puts back the mode read before the first change (%d: 0-3 only, checked in run). */
+        LOCATION_MODE("settings put secure location_mode %d && echo " + OK);
 
         final String shell;
         Command(String shell) { this.shell = shell; }
+    }
+
+    /** LOCATION_MODE with its mode: only 0-3, never other text. */
+    static String run(Command cmd, int mode) throws IOException {
+        if (cmd != Command.LOCATION_MODE || mode < 0 || mode > 3) throw new IOException("commande refusée");
+        return run(cmd.shell.replace("%d", Integer.toString(mode)));
+    }
+
+    static String run(Command cmd) throws IOException {
+        if (cmd == Command.LOCATION_MODE) throw new IOException("commande refusée");
+        return run(cmd.shell);
     }
 
     private static final int A_CNXN = 0x4e584e43, A_OPEN = 0x4e45504f, A_OKAY = 0x59414b4f,
@@ -57,8 +66,8 @@ final class UnitShell {
 
     private UnitShell() {}
 
-    /** Runs cmd and returns its output (without the marker); throws if it didn't succeed. */
-    static String run(Command cmd) throws IOException {
+    /** Runs one of the commands above and returns its output (without the marker); throws if it didn't succeed. */
+    private static String run(String shell) throws IOException {
         long deadline = android.os.SystemClock.elapsedRealtime() + DEADLINE_MS;
         try (Socket s = new Socket()) {
             s.connect(new InetSocketAddress("127.0.0.1", PORT), 3000);
@@ -71,7 +80,7 @@ final class UnitShell {
             if (m.cmd == A_AUTH) throw new IOException("l'ADB de l'écran demande une clé");
             if (m.cmd != A_CNXN) throw new IOException("réponse ADB inattendue");
 
-            send(out, A_OPEN, LOCAL_ID, 0, ("shell:" + cmd.shell + "\0").getBytes(StandardCharsets.UTF_8));
+            send(out, A_OPEN, LOCAL_ID, 0, ("shell:" + shell + "\0").getBytes(StandardCharsets.UTF_8));
             ByteArrayOutputStream result = new ByteArrayOutputStream();
             int remote = 0;
             while (true) {

@@ -167,8 +167,8 @@ public final class MainActivity extends Activity {
             s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } });
         toggle(rules, "Blanc en marche arrière", "Un blanc doux, un peu plus fort que la couleur permanente, le temps de la marche arrière",
             s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } });
-        toggle(rules, "Écran : GPS coupé et alertes Google masquées",
-            "Pas de module GPS branché : le GPS est coupé et l'alerte « accès à la position désactivé » ne s'affiche plus. La Position reste active (CarPlay sans fil en a besoin). Désactiver remet les deux.",
+        toggle(rules, "Écran : position sans GPS (plus d'alerte Google)",
+            "Position en mode réseau seul, sans GPS (pas de module branché) : la fenêtre « accès à la position désactivé » de Google ne s'affiche plus au démarrage. Désactiver remet le mode d'avant.",
             s.unitQuiet, new Toggle() { public void set(Settings x, boolean v) { x.unitQuiet = v; } });
         toggle(rules, "Clignoter quand une porte s'ouvre", null,
             s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } });

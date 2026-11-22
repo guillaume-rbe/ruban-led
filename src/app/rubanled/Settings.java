@@ -39,8 +39,8 @@ final class Settings {
     /** Short colour command (0.18): -1 not checked on this strip yet, 0 not understood, 1 works. */
     int shortColour;
     /**
-     * Dash (0.19, owner 22 Nov): GPS provider off and Google Play services' alerts refused, applied
-     * through the dash's own ADB at every start (UnitShell). Location as a whole stays on (CarPlay).
+     * Dash (0.19, owner 22 Nov): location in network-only mode (no GPS), so Google's "location off"
+     * popup no longer shows at start; applied through the dash's own ADB at every start (UnitShell).
      */
     boolean unitQuiet;
     int holdChance;
@@ -182,6 +182,15 @@ final class Settings {
 
     static void saveUnitApplied(Context ctx, boolean applied) {
         prefs(ctx).edit().putBoolean("unitApplied", applied).apply();
+    }
+
+    /** Location mode the dash had before the first change (0-3), -1 not known: put back when turned off. */
+    static int loadUnitModeBefore(Context ctx) {
+        return prefs(ctx).getInt("unitModeBefore", -1);
+    }
+
+    static void saveUnitModeBefore(Context ctx, int mode) {
+        prefs(ctx).edit().putInt("unitModeBefore", mode).apply();
     }
 
     private static SharedPreferences prefs(Context ctx) {
