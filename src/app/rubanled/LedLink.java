@@ -30,9 +30,17 @@ final class LedLink {
     private static final String TAG = "rubanled";
     /** Reconnect quickly: the strip is powered with the car, a door opened right after must blink. */
     private static final long RETRY_MS = 2500;
-    private static final long WRITE_GAP_MS = 40;
-    /** Only the newest commands matter (a blink makes many): drop the oldest beyond this. */
+    /**
+     * Pause after each write. With a response the strip has already acked the command, so a short
+     * one is enough; without, the pause is all that keeps us from flooding it.
+     */
+    private static final long GAP_ACKED_MS = 8, GAP_UNACKED_MS = 40;
+    /** Safety net: a write whose callback never came is taken as done after this long. */
+    private static final long WRITE_TIMEOUT_MS = 600;
+    /** Commands kept at most (power and queries; frames coalesce, see send). */
     private static final int MAX_QUEUE = 6;
+    /** Readiness without waiting for the notification descriptor's callback, if it never comes. */
+    private static final long READY_FALLBACK_MS = 300;
 
     private final Context ctx;
     private final Listener listener;
@@ -44,8 +52,17 @@ final class LedLink {
     private static final class Cmd {
         final byte[] data;
         final int type;
-        Cmd(byte[] data, int type) { this.data = data; this.type = type; }
+        /** A full picture (colour / levels / pixels, E1 ...): only the newest one matters. */
+        final boolean frame;
+        Cmd(byte[] data, int type) {
+            this.data = data;
+            this.type = type;
+            frame = type == Zengge.TYPE_COMMAND && data.length > 0 && data[0] == (byte) 0xe1;
+        }
     }
+
+    /** Frames replaced by a newer one before they were written (logged, for latency). */
+    private int coalesced;
 
     private String address;
     private boolean started;
@@ -55,6 +72,8 @@ final class LedLink {
     private int writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE;
     private volatile boolean ready;
     private boolean writing;
+    /** This connection has gone ready (the descriptor callback or the fallback timer). */
+    private boolean readied;
 
     LedLink(Context ctx, Listener listener) {
         this.ctx = ctx.getApplicationContext();
@@ -110,7 +129,14 @@ final class LedLink {
     private void send(final byte[] cmd, final int type) {
         h.post(new Runnable() {
             @Override public void run() {
-                queue.addLast(new Cmd(cmd, type));
+                Cmd c = new Cmd(cmd, type);
+                // latest wins: a frame waiting at the end of the queue is replaced, not followed, so
+                // an animation never lags behind the link (the order with power commands is kept)
+                if (c.frame && !queue.isEmpty() && queue.peekLast().frame) {
+                    queue.pollLast();
+                    if (++coalesced % 50 == 0) Log.i(TAG, coalesced + " frames coalesced");
+                }
+                queue.addLast(c);
                 while (queue.size() > MAX_QUEUE) queue.removeFirst();
                 pump();
             }
@@ -163,7 +189,10 @@ final class LedLink {
 
     private void closeGatt() {
         ready = false;
+        readied = false;
         writing = false;
+        h.removeCallbacks(writeDone);
+        h.removeCallbacks(readyFallback);
         writeChar = null;
         if (gatt != null) {
             try { gatt.disconnect(); } catch (Throwable ignored) {}
@@ -185,16 +214,39 @@ final class LedLink {
             ok = false;
         }
         if (!ok) {
-            // stack busy: try again shortly with the same slot
-            h.postDelayed(new Runnable() {
-                @Override public void run() { pump(); }
-            }, WRITE_GAP_MS);
+            // stack busy: put it back (a newer frame may still replace it) and try again shortly
+            queue.addFirst(c);
+            h.removeCallbacks(retryPump);
+            h.postDelayed(retryPump, GAP_ACKED_MS);
             return;
         }
         writing = true;
         // onCharacteristicWrite normally clears this; the timer is a safety net.
-        h.postDelayed(writeDone, 1000);
+        h.removeCallbacks(writeDone);
+        h.postDelayed(writeDone, WRITE_TIMEOUT_MS);
     }
+
+    private final Runnable retryPump = new Runnable() {
+        @Override public void run() { pump(); }
+    };
+
+    private long gap() {
+        return writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT ? GAP_ACKED_MS : GAP_UNACKED_MS;
+    }
+
+    /** Notifications are on (or the fallback timer ran): commands may go. */
+    private void goReady(BluetoothGatt g) {
+        if (g == null || g != gatt || readied || writeChar == null) return;
+        readied = true;
+        h.removeCallbacks(readyFallback);
+        state(true, "Ruban connecté");
+        queue.addFirst(new Cmd(Zengge.QUERY_STATE, Zengge.TYPE_QUERY));
+        pump();
+    }
+
+    private final Runnable readyFallback = new Runnable() {
+        @Override public void run() { goReady(gatt); }
+    };
 
     private final Runnable writeDone = new Runnable() {
         @Override public void run() {
@@ -215,6 +267,8 @@ final class LedLink {
                     if (g != gatt) return;
                     if (newState == BluetoothProfile.STATE_CONNECTED) {
                         state(false, "Connecté, préparation…");
+                        // short connection interval from the start: discovery and every command go faster
+                        try { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH); } catch (Throwable ignored) {}
                         if (!g.requestMtu(247)) g.discoverServices();
                     } else {
                         state(false, "Ruban déconnecté (" + status + "), nouvel essai…");
@@ -261,24 +315,28 @@ final class LedLink {
                         : BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE;
                     Log.i(TAG, "FF01 properties 0x" + Integer.toHexString(writeChar.getProperties())
                         + (writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT ? " write with response" : " write no response"));
-                    // let the descriptor write finish before the first command
-                    h.postDelayed(new Runnable() {
-                        @Override public void run() {
-                            if (g != gatt) return;
-                            // short connection interval: each command reaches the strip sooner
-                            try { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH); } catch (Throwable ignored) {}
-                            state(true, "Ruban connecté");
-                            queue.addFirst(new Cmd(Zengge.QUERY_STATE, Zengge.TYPE_QUERY));
-                            pump();
-                        }
-                    }, 300);
+                    // the first command waits for the descriptor write (onDescriptorWrite), at most
+                    // READY_FALLBACK_MS
+                    h.removeCallbacks(readyFallback);
+                    h.postDelayed(readyFallback, READY_FALLBACK_MS);
                 }
             });
         }
 
-        @Override public void onCharacteristicWrite(BluetoothGatt g, BluetoothGattCharacteristic c, int status) {
-            h.removeCallbacks(writeDone);
-            h.postDelayed(writeDone, WRITE_GAP_MS);
+        @Override public void onDescriptorWrite(final BluetoothGatt g, BluetoothGattDescriptor d, int status) {
+            h.post(new Runnable() {
+                @Override public void run() { goReady(g); }
+            });
+        }
+
+        @Override public void onCharacteristicWrite(final BluetoothGatt g, BluetoothGattCharacteristic c, int status) {
+            h.post(new Runnable() {
+                @Override public void run() {
+                    if (g != gatt) return;
+                    h.removeCallbacks(writeDone);
+                    h.postDelayed(writeDone, gap());
+                }
+            });
         }
 
         @Override public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic c) {

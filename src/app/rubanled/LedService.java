@@ -325,10 +325,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             startBlink(TEST_BLINK_SEC);
         } else if (ACTION_ON.equals(a)) {
             stopAll();
-            power(true);
+            power(true, true);
         } else if (ACTION_OFF.equals(a)) {
             stopAll();
-            power(false);
+            power(false, true);
         } else if (ACTION_TEST_SEGMENTS.equals(a)) {
             // segments 1-7 red, 8-14 green, 15-20 blue: shows how the 20 segments map to the strips
             stopAll();
@@ -405,13 +405,23 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     // ---- rules ----
 
+    /** Something other than the steady colour is on the strip (an animation, the gauge, a flash). */
+    private boolean busy() {
+        return blinking || intro || exiting || gauge || hold || apFlash || reverseLit;
+    }
+
+    /** The steady colour is showing with the owner there: a short effect (Auto Hold, Autosteer) may play. */
+    private boolean canDecorate() {
+        return link.isReady() && present() && screenIsOn && !busy() && strip != null && strip.on;
+    }
+
     /** New animation colour: saved, shown briefly on the strip, then back to the steady colour. */
     private void setAnimColour(int hue, int sat, int pct) {
         settings.blinkHue = Math.max(0, Math.min(359, hue));
         settings.blinkSat = Math.max(0, Math.min(100, sat));
         settings.blinkPct = Math.max(1, Math.min(100, pct));
         settings.save(this);
-        if (blinking || intro || exiting || hold || apFlash || reverseLit) return;     // the running animation picks it up
+        if (busy()) return;     // the running animation picks it up
         if (strip == null || !strip.on) power(true);
         colour(settings.blinkHue, settings.blinkSat, animPct(), false);
         main.removeCallbacks(previewEnd);
@@ -420,7 +430,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     private final Runnable previewEnd = new Runnable() {
         @Override public void run() {
-            if (blinking || intro || exiting || hold || apFlash || reverseLit) return;
+            if (busy()) return;
             colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
         }
     };
@@ -431,7 +441,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         settings.defaultSat = Math.max(0, Math.min(100, sat));
         settings.dayPct = Math.max(1, Math.min(100, pct));
         settings.save(this);
-        if (blinking || intro || exiting || hold || apFlash || reverseLit) return;      // the animation ends on the new colour
+        if (busy()) return;      // the animation ends on the new colour
         if (strip == null || !strip.on) power(true);
         colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
     }
@@ -530,7 +540,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     private final Runnable introFinal = new Runnable() {
         @Override public void run() {
-            if (blinking || intro || exiting || gauge || hold || apFlash || reverseLit || away()) return;
+            if (busy() || away()) return;
             colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
         }
     };
@@ -599,6 +609,16 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     }
 
     private void power(boolean on) {
+        power(on, false);
+    }
+
+    /**
+     * Strip on / off. Skipped when the strip is known to be so already on this connection: one
+     * BLE round trip less before the first frame (a door blink shows sooner), and no "on" after a
+     * colour, which puts the strip back to white. force: always sent (the app's buttons).
+     */
+    private void power(boolean on, boolean force) {
+        if (!force && strip != null && strip.on == on && link.isReady()) return;
         link.send(Zengge.power(on));
         lastSentMs = SystemClock.elapsedRealtime();
         if (strip == null) strip = new Zengge.State();
@@ -673,10 +693,13 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                     linkLostMs = 0;
                     if (introWantedMs != 0 && now - introWantedMs < INTRO_WANTED_MS) playIntro();
                     introWantedMs = 0;
-                    if (charging && present() && !gauge && !blinking && !intro && !exiting) showGauge();
+                    if (charging && present() && !busy()) showGauge();
                     applyBrightness();
-                } else if (linkLostMs == 0) {
-                    linkLostMs = now;
+                } else {
+                    if (linkLostMs == 0) linkLostMs = now;
+                    // the strip may lose power with the car: its state is asked again on reconnect,
+                    // and the first command sends "on" whatever we thought
+                    strip = null;
                 }
             }
         });
@@ -830,8 +853,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
      */
     @Override public void onAutosteer(boolean on) {
         event(on ? "Autosteer activé" : "Autosteer désactivé");
-        if (!on || !settings.apFlash || !link.isReady() || !present() || !screenIsOn || blinking || intro || exiting
-                || gauge || hold || apFlash || strip == null || !strip.on) return;
+        if (!on || !settings.apFlash || !canDecorate()) return;
         int pct = strip.hasColour && strip.val > 0 ? strip.val : targetPct();
         apFlash = true;
         link.clearQueue();
@@ -860,8 +882,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** The reverse white, if wanted and nothing else is playing. */
     private void showReverse() {
-        if (!inReverse || !settings.reverseWhite || !link.isReady() || !present() || !screenIsOn || blinking || intro
-                || exiting || gauge || hold || apFlash) return;
+        if (!inReverse || !settings.reverseWhite || !link.isReady() || !present() || !screenIsOn
+                || (busy() && !reverseLit)) return;
         int pct = targetPct();
         int white = Math.min(100, Math.max(pct + 30, Math.round(pct * 1.5f)));   // 20 % at night: 50 %
         if (strip == null || !strip.on) power(true);
@@ -891,8 +913,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable holdStart = new Runnable() {
         @Override public void run() {
             if (!autoHoldOn || !settings.holdAnim) return;
-            if (!link.isReady() || !present() || !screenIsOn || blinking || intro || exiting || gauge || charging
-                    || hold || inReverse || strip == null || !strip.on) return;
+            if (!canDecorate() || charging || inReverse) return;
             int chance = Math.max(1, settings.holdChance);
             if (rnd.nextInt(chance) != 0) {
                 event("Auto Hold : pas d'animation cette fois (1 sur " + chance + ")");
