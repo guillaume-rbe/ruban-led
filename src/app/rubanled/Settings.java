@@ -43,6 +43,12 @@ final class Settings {
      * popup no longer shows at start; applied through the dash's own ADB at every start (UnitShell).
      */
     boolean unitQuiet;
+    /**
+     * Journal (0.20): full detail (every CAN message, every Bluetooth frame, strip replies) or
+     * only the main lines; extra CAN codes to record ("2,3,4", "0-127"; empty: none).
+     */
+    boolean journalFull;
+    String journalCodes;
     int holdChance;
     /**
      * Night mode, on by default (owner, 16 Nov): from nightStartWinter (19 h) in winter time and
@@ -78,6 +84,8 @@ final class Settings {
         s.reverseWhite = p.getBoolean("reverseWhite", true);
         s.shortColour = p.getInt("shortColour", -1);
         s.unitQuiet = p.getBoolean("unitQuiet", true);
+        s.journalFull = p.getBoolean("journalFull", true);
+        s.journalCodes = p.getString("journalCodes", "");
         s.holdChance = p.getInt("holdChance", 4);
         // new keys in 0.5 so the new defaults (on, 20 %) apply to installs that had it off
         s.night = p.getBoolean("night5", true);
@@ -110,6 +118,8 @@ final class Settings {
             .putBoolean("reverseWhite", reverseWhite)
             .putInt("shortColour", shortColour)
             .putBoolean("unitQuiet", unitQuiet)
+            .putBoolean("journalFull", journalFull)
+            .putString("journalCodes", journalCodes)
             .putInt("holdChance", holdChance)
             .putBoolean("night5", night)
             .putInt("nightStartWinter", nightStartWinter)

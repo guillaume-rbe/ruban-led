@@ -115,6 +115,34 @@ Abandonnés en 0.7 : l'app CAN d'origine ne publie pas leur état (enregistremen
 n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails dans
 [docs/DONNEES-CAN.md](docs/DONNEES-CAN.md).
 
+## Journaux (0.20)
+
+Pour déboguer sans recompiler l'app : un journal large, gardé sur l'écran **7 jours et 20 Mo au
+plus** (fichier par jour dans le stockage privé de l'app, le plus ancien supprimé en premier), une
+ligne par fait : `HH:mm:ss.SSS ÉTIQUETTE message`.
+
+| Étiquette | Contenu |
+|---|---|
+| `EVT` | les lignes de « Derniers événements » |
+| `REGLE` | chaque décision et sa raison (animation lancée, refusée parce que…, ce qui suit une animation) |
+| `CAN` | chaque message reçu de l'app CAN, tous ses champs (un message identique n'est réécrit qu'une fois par minute) |
+| `BLE` | chaque commande envoyée au ruban (en hexadécimal), son accusé et son délai, les réponses du ruban, la file en retard |
+| `LIEN` | connexion Bluetooth, MTU |
+| `ECRAN` / `APP` / `ENVOI` | commandes de l'écran, démarrage, réglages, plantages, envois |
+
+**Journal détaillé** (activé par défaut) : `CAN` de tous les codes et `BLE` de chaque image ; sinon
+seulement les données des règles et les commandes. **Codes CAN en plus** : `2,3,4` ou `0-127`,
+enregistrés tels quels (abonnement en lecture seule, comme les autres).
+
+**Envoi** : bouton « Envoyer les journaux (24 h) » ou « Tout (7 jours) ». Chaque étape s'affiche
+(certificat, lecture, compression, connexion, envoi avec barre d'avancement, réponse), ✓ ou ✗ avec
+la raison. Le fichier part en `PUT` HTTPS, en gzip (2 Mo au plus : les lignes les plus anciennes sont
+retirées si besoin), avec en tête l'état de l'app, ses réglages (sans l'adresse du ruban) et son
+logcat. L'adresse du serveur et le certificat client sont dans le stockage privé de l'app
+(`files/journaux.conf` : `url=…` et `password=…`, `files/client.p12`), posés par ADB : rien de
+tout cela n'est dans ce dépôt. Côté serveur, il suffit d'accepter un `PUT` sur
+`/journaux/ruban-AAAAMMJJ-HHMMSS.log.gz` avec ce certificat client.
+
 ## Réglages de l'écran (0.19)
 
 Option « Écran : position sans GPS (plus d'alerte Google) » (activée par défaut) : à chaque

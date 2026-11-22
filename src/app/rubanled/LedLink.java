@@ -80,7 +80,14 @@ final class LedLink {
     /** This connection has gone ready (the descriptor callback or the fallback timer). */
     private boolean readied;
 
+    private Journal journal;
+    /** When the command being written left, for the ack latency in the journal. */
+    private long writeStartMs;
+    private String writeKind = "";
+    private boolean acked;
+
     LedLink(Context ctx, Listener listener) {
+        journal = Journal.get(ctx);
         this.ctx = ctx.getApplicationContext();
         this.listener = listener;
         thread.start();
@@ -155,7 +162,10 @@ final class LedLink {
                 // an animation never lags behind the link (the order with power commands is kept)
                 if (c.frame && !queue.isEmpty() && queue.peekLast().frame) {
                     queue.pollLast();
-                    if (++coalesced % 50 == 0) Log.i(TAG, coalesced + " frames coalesced");
+                    if (++coalesced % 50 == 0) {
+                        Log.i(TAG, coalesced + " frames coalesced");
+                        journal.detail("BLE", coalesced + " images remplacées avant envoi (file en retard)");
+                    }
                 }
                 queue.addLast(c);
                 while (queue.size() > MAX_QUEUE) queue.removeFirst();
@@ -239,6 +249,7 @@ final class LedLink {
             ok = false;
         }
         if (!ok) {
+            journal.detail("BLE", "pile Bluetooth occupée, nouvel essai");
             // stack busy: put it back (a newer frame may still replace it) and try again shortly
             queue.addFirst(c);
             h.removeCallbacks(retryPump);
@@ -246,6 +257,11 @@ final class LedLink {
             return;
         }
         writing = true;
+        acked = false;
+        writeStartMs = android.os.SystemClock.elapsedRealtime();
+        writeKind = c.type == Zengge.TYPE_QUERY ? "requête" : c.frame ? "image" : "commande";
+        if (journal.full()) journal.log("BLE", "envoi " + writeKind + " " + Journal.hex(c.data, 120) + " (file " + queue.size() + ")");
+        else if (!c.frame) journal.log("BLE", "envoi " + writeKind + " " + Journal.hex(c.data, 16));
         // onCharacteristicWrite normally clears this; the timer is a safety net.
         h.removeCallbacks(writeDone);
         h.postDelayed(writeDone, WRITE_TIMEOUT_MS);
@@ -275,12 +291,14 @@ final class LedLink {
 
     private final Runnable writeDone = new Runnable() {
         @Override public void run() {
+            if (writing && !acked) journal.log("BLE", "pas d'accusé de réception après " + WRITE_TIMEOUT_MS + " ms (" + writeKind + ")");
             writing = false;
             pump();
         }
     };
 
     private void state(final boolean r, final String text) {
+        journal.log("LIEN", text);
         ready = r;
         listener.onLinkState(r, text);
     }
@@ -305,6 +323,7 @@ final class LedLink {
 
         @Override public void onMtuChanged(final BluetoothGatt g, int mtu, int status) {
             Log.i(TAG, "mtu " + mtu + " status " + status);
+            journal.log("LIEN", "MTU " + mtu + " (statut " + status + ")");
             h.post(new Runnable() {
                 @Override public void run() { if (g == gatt) g.discoverServices(); }
             });
@@ -358,6 +377,10 @@ final class LedLink {
             h.post(new Runnable() {
                 @Override public void run() {
                     if (g != gatt) return;
+                    acked = true;
+                    long ms = android.os.SystemClock.elapsedRealtime() - writeStartMs;
+                    if (status != 0) journal.log("BLE", "accusé " + writeKind + " en erreur, statut " + status + " (" + ms + " ms)");
+                    else journal.detail("BLE", "accusé " + writeKind + " " + ms + " ms");
                     h.removeCallbacks(writeDone);
                     h.postDelayed(writeDone, gap());
                 }
@@ -365,7 +388,9 @@ final class LedLink {
         }
 
         @Override public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic c) {
-            Zengge.State s = Zengge.parse(c.getValue());
+            byte[] v = c.getValue();
+            Zengge.State s = Zengge.parse(v);
+            journal.detail("BLE", "reçu " + Journal.hex(v, 64) + (s != null ? " = " + s : ""));
             if (s != null) listener.onStripState(s);
         }
     };

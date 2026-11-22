@@ -51,6 +51,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     static final String ACTION_EXIT = "app.rubanled.EXIT";
     /** Plays the Auto Hold animations one after the other, HOLD_TEST_MS each press. */
     static final String ACTION_HOLD_TEST = "app.rubanled.HOLD_TEST";
+    /** Sends the journal (extra "hours": 24, or 0 for all of it); the app shows the steps (Journal). */
+    static final String ACTION_SEND_LOGS = "app.rubanled.SEND_LOGS";
     /** Extras: hue 0-359, sat 0-100, pct 1-100. Saved as the colour, applied at once. */
     static final String ACTION_SET_COLOUR = "app.rubanled.SET_COLOUR";
     /** Extra "target" of ACTION_SET_COLOUR: the steady colour, or the animations' one. */
@@ -252,8 +254,20 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         }
     };
 
+    /** The debug journal (0.20): events, rule decisions, CAN, Bluetooth; see Journal. */
+    private Journal journal;
+
     @Override public void onCreate() {
         super.onCreate();
+        journal = Journal.get(this);
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override public void uncaughtException(Thread t, Throwable e) {
+                journal.crash(t, e);
+                if (previous != null) previous.uncaughtException(t, e);
+            }
+        });
+        journal.log("APP", "service démarré, Ruban LED " + version() + " ; " + Journal.device());
         startForeground(1, notification());
         logicThread = new HandlerThread("led-rules");
         logicThread.start();
@@ -275,6 +289,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         doors = new DoorFeed(this, this, logicThread.getLooper());
         link.start(settings.address);
         doors.start();
+        applyJournalSettings();
         main.post(nightCheck);
         unitThread.start();
         unit = new android.os.Handler(unitThread.getLooper());
@@ -326,6 +341,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             main.removeCallbacks(nightCheck);
             main.post(nightCheck);
             unitApply(0);              // the dash switch may have changed
+            applyJournalSettings();
+            journal.log("APP", "réglages : " + settingsLine());
         } else if (ACTION_TEST_BLINK.equals(a)) {
             startBlink(TEST_BLINK_SEC);
         } else if (ACTION_ON.equals(a)) {
@@ -344,6 +361,16 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             lastSentMs = SystemClock.elapsedRealtime();
         } else if (ACTION_INTRO.equals(a)) {
             playIntro();
+        } else if (ACTION_SEND_LOGS.equals(a)) {
+            int hours = intent.getIntExtra("hours", 24);
+            journal.log("ENVOI", "demandé (" + (hours > 0 ? hours + " h" : "tout") + ")");
+            journal.send(hours, header(), new Journal.Result() {
+                @Override public void done(final boolean ok, final String text) {
+                    main.post(new Runnable() {
+                        @Override public void run() { event(ok ? "Journaux envoyés : " + text : "Envoi des journaux impossible : " + text); }
+                    });
+                }
+            });
         } else if (ACTION_HOLD_TEST.equals(a)) {
             stopAll();
             power(true);
@@ -418,6 +445,28 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     }
 
     /** The steady colour is showing with the owner there: a short effect (Auto Hold, Autosteer) may play. */
+    /** Why the strip is busy or an effect can't play, for the journal. */
+    private String busyWhy() {
+        StringBuilder b = new StringBuilder();
+        if (!link.isReady()) b.append("ruban pas connecté, ");
+        if (!present()) b.append("voiture verrouillée, ");
+        if (!screenIsOn) b.append("écran éteint, ");
+        if (blinking) b.append("clignotement, ");
+        if (intro) b.append("allumage, ");
+        if (exiting) b.append("extinction, ");
+        if (gauge) b.append("jauge, ");
+        if (hold) b.append("animation d'arrêt, ");
+        if (apFlash) b.append("bleu Autosteer, ");
+        if (reverseLit) b.append("marche arrière, ");
+        if (strip == null) b.append("état du ruban inconnu, ");
+        else if (!strip.on) b.append("ruban éteint, ");
+        return b.length() == 0 ? "rien" : b.substring(0, b.length() - 2);
+    }
+
+    private void trace(String what) {
+        journal.log("REGLE", what);
+    }
+
     private boolean canDecorate() {
         return link.isReady() && present() && screenIsOn && !busy() && strip != null && strip.on;
     }
@@ -470,6 +519,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
      * charging; off if the car is locked (the owner has left).
      */
     private void afterAnimation() {
+        trace("après animation : " + (away() ? "verrouillée → éteint" : charging ? "recharge → jauge"
+            : inReverse && settings.reverseWhite ? "marche arrière → blanc" : !screenIsOn && ownerThere == null ? "écran éteint → éteint" : "couleur permanente"));
         ruleText = "";
         if (away()) {
             ruleText = "Voiture verrouillée : ruban éteint";
@@ -491,6 +542,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** Start-up animation, 3 times: the strip lights up progressively, then the steady colour. */
     private void playIntro() {
+        trace("animation d'allumage" + (link.isReady() ? "" : " (ruban pas connecté : jouée à la connexion)"));
         if (!link.isReady()) {
             introWantedMs = SystemClock.elapsedRealtime();
             return;
@@ -554,6 +606,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     };
 
     private void startBlink(long maxSec) {
+        trace("clignotement " + maxSec + " s max" + (hazardOn ? " (warnings)" : "") + (busy() ? ", interrompt : " + busyWhy() : ""));
         stopHold();
         gauge = false;
         main.removeCallbacks(gaugeTick);
@@ -964,6 +1017,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable burstEnd = new Runnable() {
         @Override public void run() {
             int n = flashes;
+            trace("salve de clignotants : " + n + " flash(s)");
             flashes = 0;
             if (n == 1) {
                 // the welcome lights are on with the unlock and off at the lock; and a single flash
@@ -996,7 +1050,9 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
      */
     @Override public void onAutosteer(boolean on) {
         event(on ? "Autosteer activé" : "Autosteer désactivé");
+        if (on && settings.apFlash && !canDecorate()) trace("bleu Autosteer non joué : " + busyWhy());
         if (!on || !settings.apFlash || !canDecorate()) return;
+        trace("bleu Autosteer 1 s");
         int pct = strip.hasColour && strip.val > 0 ? strip.val : targetPct();
         apFlash = true;
         link.clearQueue();
@@ -1025,6 +1081,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** The reverse white, if wanted and nothing else is playing. */
     private void showReverse() {
+        trace("marche arrière : blanc" + (busy() && !reverseLit ? " refusé (" + busyWhy() + ")" : ""));
         if (!inReverse || !settings.reverseWhite || !link.isReady() || !present() || !screenIsOn
                 || (busy() && !reverseLit)) return;
         int pct = targetPct();
@@ -1056,7 +1113,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable holdStart = new Runnable() {
         @Override public void run() {
             if (!autoHoldOn || !settings.holdAnim) return;
-            if (!canDecorate() || charging || inReverse) return;
+            if (!canDecorate() || charging || inReverse) {
+                trace("Auto Hold : pas d'animation, " + (charging ? "recharge" : inReverse ? "marche arrière" : busyWhy()));
+                return;
+            }
             int chance = Math.max(1, settings.holdChance);
             if (rnd.nextInt(chance) != 0) {
                 event("Auto Hold : pas d'animation cette fois (1 sur " + chance + ")");
@@ -1071,6 +1131,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** testMs > 0: a test from the app, ending by itself; 0: until the Auto Hold ends. */
     private void startHold(int kind, long testMs) {
+        trace("animation d'arrêt " + HoldShow.NAMES[kind] + (testMs > 0 ? " (test)" : ""));
         holdKind = kind;
         holdShow = new HoldShow(kind, rnd);
         hold = true;
@@ -1215,6 +1276,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** Exit, 3 times: the light withdraws in the reverse order of the entrance, then off. */
     private void playExit() {
+        trace("animation d'extinction");
         boolean wasGauge = gauge;
         stopAll();
         if (!link.isReady() || strip == null || !strip.on) {
@@ -1280,11 +1342,51 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     // ---- helpers ----
 
+    private void applyJournalSettings() {
+        journal.setFull(settings.journalFull);
+        doors.setExtraCodes(settings.journalCodes);
+    }
+
+    private String version() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Throwable t) {
+            return "?";
+        }
+    }
+
+    /** Settings for the journal, the strip's address left out. */
+    private String settingsLine() {
+        Settings s = settings;
+        return "couleur T" + s.defaultHue + " S" + s.defaultSat + " " + s.dayPct + "%, alerte T" + s.blinkHue + " " + s.blinkPct + "%"
+            + ", nuit " + (s.night ? s.nightStartWinter + "h/" + s.nightStartSummer + "h-" + s.nightEnd + "h " + s.nightPct + "%" : "non")
+            + ", animations " + (s.intro ? "×" + s.animRepeat : "non") + ", portes " + s.doorBlink + ", coffre " + s.bootAndFrunk
+            + ", warnings " + s.hazard + ", arrêt " + (s.holdAnim ? "1/" + s.holdChance : "non") + ", autosteer " + s.apFlash
+            + ", marche arrière " + s.reverseWhite + ", écran sans GPS " + s.unitQuiet + ", commande courte " + s.shortColour
+            + ", musique CarPlay " + s.autoPlay + ", journal " + (s.journalFull ? "détaillé" : "normal")
+            + (s.journalCodes == null || s.journalCodes.isEmpty() ? "" : " codes+ " + s.journalCodes);
+    }
+
+    /** Head of an upload: what the app is and does right now, then its own logcat. */
+    private String header() {
+        return "Ruban LED " + version() + " — " + new Date() + "\n"
+            + Journal.device() + "\n"
+            + "Liaison : " + linkText + " | " + stripText + "\n"
+            + "Présence : " + presenceText + " | " + doorsText + " | " + feedText + "\n"
+            + "Règle en cours : " + (ruleText.isEmpty() ? "aucune" : ruleText) + " | occupé : " + busyWhy() + "\n"
+            + "État : propriétaire=" + ownerThere + " recharge=" + charging + " batterie=" + soc + "% autohold=" + autoHoldOn
+            + " marche arrière=" + inReverse + " écran=" + screenIsOn + " nuit=" + settings.nightNow() + "\n"
+            + "Réglages : " + settingsLine() + "\n"
+            + "Derniers événements :\n" + eventsText + "\n"
+            + "==== LOGCAT (appli) ====\n" + Journal.logcat(3000);
+    }
+
     private static final SimpleDateFormat CLOCK = new SimpleDateFormat("HH:mm:ss", Locale.FRANCE);
     private final ArrayList<String> events = new ArrayList<>();
 
     /** Recent events, shown in the app (helps to see whether a door message arrived late). */
     private void event(String what) {
+        journal.log("EVT", what);
         events.add(0, CLOCK.format(new Date()) + "  " + what);
         while (events.size() > 8) events.remove(events.size() - 1);
         StringBuilder b = new StringBuilder();

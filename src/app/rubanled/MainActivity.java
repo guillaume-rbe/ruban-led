@@ -21,6 +21,7 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Switch;
@@ -46,7 +47,11 @@ public final class MainActivity extends Activity {
     private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine, autoPlayLine;
     private Button autoPlayAccess;
     private View linkDot;
-    private EditText address, blinkMs, blinkMax, repeat, holdChance, nightWinter, nightSummer, nightEnd, nightPct;
+    private EditText address, blinkMs, blinkMax, repeat, holdChance, nightWinter, nightSummer, nightEnd, nightPct, journalCodes;
+    /** Journal card (0.20): certificate state, upload steps and progress. */
+    private TextView journalState, journalSteps;
+    private ProgressBar journalBar;
+    private Button send24, sendAll;
     private static boolean askedBattery;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
     private static final long COLOUR_THROTTLE_MS = 200;
@@ -206,6 +211,45 @@ public final class MainActivity extends Activity {
         rules.addView(n1);
         rules.addView(n2);
 
+        // ---- journal (0.20): sent on demand, the steps and a progress bar shown here
+        LinearLayout journal = card(right, "Journaux (débogage)");
+        journalState = text("", 13, MUTED, false);
+        journal.addView(journalState);
+        LinearLayout js = new LinearLayout(this);
+        send24 = pill("Envoyer les journaux (24 h)", true);
+        send24.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { sendLogs(24); }
+        });
+        sendAll = pill("Tout (7 jours)", false);
+        sendAll.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { sendLogs(0); }
+        });
+        js.addView(send24, weight(1.6f, dp(8)));
+        js.addView(sendAll, weight(1, 0));
+        LinearLayout.LayoutParams jsp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        jsp.topMargin = dp(8);
+        journal.addView(js, jsp);
+        journalBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        journalBar.setMax(100);
+        journalBar.setVisibility(View.GONE);
+        LinearLayout.LayoutParams jbp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(14));
+        jbp.topMargin = dp(10);
+        journal.addView(journalBar, jbp);
+        journalSteps = text("", 14, TEXT, false);
+        journalSteps.setTypeface(Typeface.MONOSPACE);
+        journalSteps.setVisibility(View.GONE);
+        journal.addView(journalSteps);
+        journal.addView(text("Avant d'envoyer : partage de connexion du téléphone, et « Journaux Ruban LED » activé dans Home Assistant (vue Tesla).",
+            13, MUTED, false));
+        toggle(journal, "Journal détaillé", "Chaque message CAN, chaque commande Bluetooth et réponse du ruban (sinon les lignes principales)",
+            s.journalFull, new Toggle() { public void set(Settings x, boolean v) { x.journalFull = v; } });
+        LinearLayout jc = new LinearLayout(this);
+        journalCodes = number(jc, "Codes CAN en plus (ex. 2,3,4 ou 0-127)", 0);
+        journalCodes.setText(s.journalCodes);
+        journalCodes.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        journal.addView(jc);
+
         LinearLayout strip = card(right, "Ruban et application");
         strip.addView(text("Adresse Bluetooth du ruban", 14, MUTED, false));
         address = new EditText(this);
@@ -285,9 +329,37 @@ public final class MainActivity extends Activity {
             eventsLine.setText(LedService.eventsText.isEmpty() ? "—" : LedService.eventsText);
             autoPlayLine.setText(CarPlayAutoPlay.text);
             autoPlayAccess.setVisibility(CarPlayAutoPlay.hasAccess(MainActivity.this) ? View.GONE : View.VISIBLE);
-            main.postDelayed(this, 1000);
+            refreshJournal();
+            main.postDelayed(this, Journal.sending ? 250 : 1000);
         }
     };
+
+    // ---- journal (0.20)
+
+    private void sendLogs(int hours) {
+        if (Journal.sending) return;
+        Journal.steps = "…  Envoi demandé";
+        Journal.percent = 0;
+        startService(new Intent(this, LedService.class).setAction(LedService.ACTION_SEND_LOGS).putExtra("hours", hours));
+        refreshJournal();
+    }
+
+    private void refreshJournal() {
+        Journal j = Journal.get(this);
+        journalState.setText(j.configured() ? "Certificat installé · " + j.sizeText()
+            : "Certificat pas encore installé (par ADB, voir le README) · " + j.sizeText());
+        String steps = Journal.steps;
+        journalSteps.setVisibility(steps.isEmpty() ? View.GONE : View.VISIBLE);
+        journalSteps.setText(steps);
+        int p = Journal.percent;
+        journalBar.setVisibility(p < 0 || steps.isEmpty() ? View.GONE : View.VISIBLE);
+        if (p >= 0) journalBar.setProgress(p);
+        boolean busy = Journal.sending;
+        send24.setEnabled(!busy);
+        sendAll.setEnabled(!busy);
+        send24.setAlpha(busy ? 0.5f : 1f);
+        sendAll.setAlpha(busy ? 0.5f : 1f);
+    }
 
     // ---- actions
 
@@ -303,6 +375,7 @@ public final class MainActivity extends Activity {
             s.nightStartSummer = clamp(num(nightSummer), 0, 23);
             s.nightEnd = clamp(num(nightEnd), 0, 23);
             s.nightPct = clamp(num(nightPct), 1, 100);
+            s.journalCodes = journalCodes.getText().toString().replaceAll("[^0-9,;\\- ]", "").trim();
             s.save(this);
             LedService.send(this, LedService.ACTION_RELOAD);
             Toast.makeText(this, "Enregistré", Toast.LENGTH_SHORT).show();

@@ -2,6 +2,12 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.20
+
+- **Journal de débogage** : tout ce que l'app voit et fait est gardé sur l'écran (7 jours, 20 Mo au plus, le plus ancien part en premier) : événements, décisions des règles avec leur raison (« Auto Hold : pas d'animation, recharge »…), chaque message CAN avec tous ses champs, chaque commande Bluetooth avec son accusé de réception et son délai, les réponses du ruban, l'état de la liaison, les commandes de l'écran et les plantages.
+- **Journal détaillé** (option, activée par défaut) et **codes CAN en plus** (ex. `2,3,4` ou `0-127`) : enregistrer d'autres données de la voiture sans nouvelle version.
+- **Bouton « Envoyer les journaux »** (24 h, ou tout) dans la carte « Journaux » : chaque étape s'affiche (✓ / ✗ avec la raison) avec une barre d'avancement. Envoi chiffré avec certificat client vers un serveur personnel, ouvert seulement à la demande ; l'en-tête donne l'état complet de l'app et son logcat.
+
 ## 0.19
 
 - **Plus de fenêtre « accès à la position désactivé » au démarrage** (option, activée par défaut) : cette fenêtre de Google (Localiser mon appareil, « Fermer / Activer la localisation ») venait de la Position coupée. À chaque démarrage, Ruban LED met la Position de l'écran en **mode réseau seul, sans GPS** (aucun module n'est branché ; la précision de la localisation Google étant coupée, pas de scans Wi-Fi non plus). Passe par l'ADB réseau de l'écran, comme Binnacle ; l'état avant / après et l'écran au premier plan un peu après le démarrage sont notés dans « Derniers événements ». Désactiver l'option remet le mode d'avant.

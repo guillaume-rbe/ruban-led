@@ -45,8 +45,19 @@ final class DoorFeed {
         void onGear(int gear);
     }
 
-    /** The only codes read: doors, lights, battery, speed (for speedlimitsw). */
+    /** The codes the rules read: doors, lights, battery, speed (for speedlimitsw). */
     private static final int[] CODES = {15, 9, 11, 10};
+    /**
+     * Subscribed: CODES plus the extra ones asked for in the app, for the journal only (0.20:
+     * any CAN code can be recorded without a new build). Still read-only.
+     */
+    private volatile int[] codes = CODES.clone();
+    private final Journal journal;
+    /** Last journal line per code, so an unchanged message isn't written again. */
+    private final java.util.HashMap<Integer, String> lastCan = new java.util.HashMap<>();
+    private final java.util.HashMap<Integer, Long> lastCanMs = new java.util.HashMap<>();
+    /** An unchanged message is still written this often (to show the feed is alive). */
+    private static final long CAN_REPEAT_MS = 60000;
 
     private static final String TAG = "rubanled";
     private static final String DESCRIPTOR = "com.mcu.iinterface.aidl.IMcuService";
@@ -77,6 +88,7 @@ final class DoorFeed {
     DoorFeed(Context ctx, Listener listener, Looper looper) {
         this.ctx = ctx.getApplicationContext();
         this.listener = listener;
+        journal = Journal.get(ctx);
         main = new Handler(looper);
         workerThread.start();
         worker = new Handler(workerThread.getLooper());
@@ -85,6 +97,7 @@ final class DoorFeed {
                 if (!running) return;
                 try {
                     Bundle b = msg.getData();
+                    journalCan(msg.what, b);
                     if (msg.what == CODE_LIGHTS) {
                         left = lit(b, "leftlight", left);
                         right = lit(b, "rightlight", right);
@@ -162,6 +175,59 @@ final class DoorFeed {
         if (o instanceof Boolean) return (Boolean) o;
         if (o instanceof String) return "1".equals(((String) o).trim()) || "true".equalsIgnoreCase(((String) o).trim());
         return def;
+    }
+
+    /**
+     * Extra codes for the journal, e.g. "2,3,4" or "0-127" (empty: none). Subscribes again if
+     * the list changed.
+     */
+    void setExtraCodes(String spec) {
+        java.util.TreeSet<Integer> set = new java.util.TreeSet<>();
+        for (int c : CODES) set.add(c);
+        if (spec != null) {
+            for (String part : spec.split("[,; ]+")) {
+                try {
+                    if (part.contains("-")) {
+                        String[] r = part.split("-");
+                        int a = Integer.parseInt(r[0].trim()), z = Integer.parseInt(r[1].trim());
+                        for (int c = Math.max(0, a); c <= Math.min(255, z); c++) set.add(c);
+                    } else if (!part.trim().isEmpty()) {
+                        int c = Integer.parseInt(part.trim());
+                        if (c >= 0 && c <= 255) set.add(c);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        int[] next = new int[set.size()];
+        int i = 0;
+        for (int c : set) next[i++] = c;
+        if (java.util.Arrays.equals(next, codes)) return;
+        codes = next;
+        journal.log("CAN", "codes suivis : " + set);
+        worker.post(new Runnable() {
+            @Override public void run() {
+                if (!running || binder == null) return;
+                unregister();
+                register();
+            }
+        });
+    }
+
+    /** Every message, all its fields: changes always, the same again only once a minute. */
+    private void journalCan(int code, Bundle b) {
+        boolean rules = code == CODE_DOORS || code == CODE_LIGHTS || code == CODE_BATTERY;
+        if (!rules && !journal.full()) return;            // code 10 (speed) and extra codes: full journal only
+        StringBuilder s = new StringBuilder();
+        java.util.TreeSet<String> keys = new java.util.TreeSet<>(b.keySet());
+        for (String k : keys) s.append(k).append('=').append(b.get(k)).append(' ');
+        String line = s.toString().trim();
+        long now = android.os.SystemClock.elapsedRealtime();
+        Long last = lastCanMs.get(code);
+        if (line.equals(lastCan.get(code)) && last != null && now - last < CAN_REPEAT_MS) return;
+        lastCan.put(code, line);
+        lastCanMs.put(code, now);
+        journal.log("CAN", code + " " + line);
     }
 
     void start() {
@@ -249,7 +315,7 @@ final class DoorFeed {
             d.writeInterfaceToken(DESCRIPTOR);
             d.writeInt(1);
             messenger.writeToParcel(d, 0);
-            d.writeIntArray(CODES.clone());
+            d.writeIntArray(codes.clone());
             Parcel r = call(TX_REGISTER, d);
             registered = r != null && r.readInt() != 0;
             if (r != null) r.recycle();
