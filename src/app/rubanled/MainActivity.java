@@ -46,7 +46,7 @@ public final class MainActivity extends Activity {
     private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine, autoPlayLine;
     private Button autoPlayAccess;
     private View linkDot;
-    private EditText address, blinkMs, blinkMax, repeat, nightWinter, nightSummer, nightEnd, nightPct;
+    private EditText address, blinkMs, blinkMax, repeat, holdChance, nightWinter, nightSummer, nightEnd, nightPct;
     private static boolean askedBattery;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
     private static final long COLOUR_THROTTLE_MS = 200;
@@ -121,22 +121,52 @@ public final class MainActivity extends Activity {
 
         // ---- right: actions, rules, strip
         LinearLayout actions = card(right, "Actions");
-        LinearLayout row1 = new LinearLayout(this), row2 = new LinearLayout(this);
-        row1.addView(action("Allumage", LedService.ACTION_INTRO, true), weight(1, dp(8)));
-        row1.addView(action("Extinction", LedService.ACTION_EXIT, true), weight(1, dp(8)));
-        row1.addView(action("Clignotement", LedService.ACTION_TEST_BLINK, true), weight(1, 0));
+        LinearLayout row2 = new LinearLayout(this);
+        // test buttons: two per line, with names that say what they play (owner, 22 Nov)
+        LinearLayout testRow = column(), t1 = new LinearLayout(this), t2 = new LinearLayout(this);
+        t1.addView(action("Animation d'allumage", LedService.ACTION_INTRO, true), weight(1, dp(8)));
+        t1.addView(action("Animation d'extinction", LedService.ACTION_EXIT, true), weight(1, 0));
+        t2.addView(action("Clignotement d'alerte", LedService.ACTION_TEST_BLINK, true), weight(1, dp(8)));
+        t2.addView(action("Animations à l'arrêt", LedService.ACTION_HOLD_TEST, true), weight(1, 0));
+        testRow.addView(t1);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        tp.topMargin = dp(8);
+        testRow.addView(t2, tp);
         row2.addView(action("Allumer", LedService.ACTION_ON, false), weight(1, dp(8)));
         row2.addView(action("Éteindre", LedService.ACTION_OFF, false), weight(1, dp(8)));
         row2.addView(action("Couleur permanente", LedService.ACTION_DEFAULT, false), weight(1.4f, 0));
-        actions.addView(row1);
+        actions.addView(row2);
+        // the test buttons are hidden until "Tests" is pressed (owner, 22 Nov)
+        final Button tests = pill("Boutons de test ▸", false);
+        final LinearLayout tests1 = testRow;
+        tests1.setVisibility(View.GONE);
+        tests.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                boolean show = tests1.getVisibility() != View.VISIBLE;
+                tests1.setVisibility(show ? View.VISIBLE : View.GONE);
+                tests.setText(show ? "Boutons de test ▾" : "Boutons de test ▸");
+            }
+        });
         LinearLayout.LayoutParams r2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT);
         r2.topMargin = dp(8);
-        actions.addView(row2, r2);
+        actions.addView(tests, r2);
+        LinearLayout.LayoutParams r1 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        r1.topMargin = dp(8);
+        actions.addView(testRow, r1);
 
         LinearLayout rules = card(right, "Règles");
         toggle(rules, "Animations ×3", "Allumage au déverrouillage, extinction au verrouillage (sinon allumé / éteint d'un coup)",
             s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } });
+        toggle(rules, "Animation à l'arrêt (Auto Hold)",
+            "Après 1 s d'Auto Hold, une fois sur N au hasard : une animation au hasard sur le tableau de bord, jusqu'au départ",
+            s.holdAnim, new Toggle() { public void set(Settings x, boolean v) { x.holdAnim = v; } });
+        toggle(rules, "Bleu à l'activation de l'Autosteer", "1 s dans le bleu de l'Autopilot de Binnacle, à la luminosité du moment",
+            s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } });
+        toggle(rules, "Blanc en marche arrière", "Un blanc doux, un peu plus fort que la couleur permanente, le temps de la marche arrière",
+            s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } });
         toggle(rules, "Clignoter quand une porte s'ouvre", null,
             s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } });
         toggle(rules, "… aussi coffre et frunk", null,
@@ -165,6 +195,7 @@ public final class MainActivity extends Activity {
         blinkMs = number(n1, "Clignotement (ms)", s.blinkMs);
         blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
         repeat = number(n1, "Animations ×", s.animRepeat);
+        holdChance = number(n1, "Arrêt : 1 sur", s.holdChance);
         nightWinter = number(n2, "Nuit hiver (h)", s.nightStartWinter);
         nightSummer = number(n2, "Nuit été (h)", s.nightStartSummer);
         nightEnd = number(n2, "jusqu'à (h)", s.nightEnd);
@@ -264,6 +295,7 @@ public final class MainActivity extends Activity {
             s.blinkMs = clamp(num(blinkMs), 150, 5000);
             s.blinkMaxSec = clamp(num(blinkMax), 5, 3600);
             s.animRepeat = clamp(num(repeat), 1, 10);
+            s.holdChance = clamp(num(holdChance), 1, 20);
             s.nightStartWinter = clamp(num(nightWinter), 0, 23);
             s.nightStartSummer = clamp(num(nightSummer), 0, 23);
             s.nightEnd = clamp(num(nightEnd), 0, 23);

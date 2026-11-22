@@ -17,12 +17,12 @@ import android.util.Log;
 /**
  * Door state from the stock CAN app (com.xbs.canapp), READ-ONLY, the same way Binnacle's CanFeed
  * does it: the only binder calls are IMcuService transaction 1 (regPropIdList) and 2
- * (unregPropIdList), for codes 15, 9 and 11. Nothing is ever sent to the MCU or the car.
+ * (unregPropIdList), for codes 15, 9, 11 and 10. Nothing is ever sent to the MCU or the car.
  *
  * Code 15, key "doorval": 0x80 driver, 0x40 passenger, 0x20 rear right, 0x10 rear left,
  * 0x08 boot, 0x04 frunk. Code 9, keys "leftlight" / "rightlight": the indicators, 1 = lit,
  * 2 = off; they follow the actual flashing; "postlight" = the parking/welcome lights;
- * "chargelight" = charging. Code 11: "jhmail" and
+ * "chargelight" = charging; "autohandlight" = Auto Hold. Code 11: "jhmail" and
  * "batterylevel" for the battery % ({@link Battery}). (docs/FIELD_MAP.md in Binnacle.)
  */
 final class DoorFeed {
@@ -35,17 +35,25 @@ final class DoorFeed {
         void onFeedState(String text);
         /** Code 9 "postlight": the parking / welcome lights (they come on when the car unlocks). */
         void onParkLights(boolean on);
+        /** Code 9 "autohandlight": Auto Hold, true while held at a standstill in D/R (Binnacle, 28 Oct). */
+        void onAutoHold(boolean on);
+        /** Code 9 "autodrivermode": Autosteer on / off (Binnacle, verified 28 Oct). */
+        void onAutosteer(boolean on);
+        /** Code 10 "speedlimitsw", meaning unknown (the speed limiter?): its raw value when it changes. */
+        void onSpeedLimitSw(String value);
+        /** Code 11 "gear": 0 Park, 1 Reverse, 3 Drive (Binnacle, verified); when it changes. */
+        void onGear(int gear);
     }
 
-    /** The only codes read: doors, lights, battery. */
-    private static final int[] CODES = {15, 9, 11};
+    /** The only codes read: doors, lights, battery, speed (for speedlimitsw). */
+    private static final int[] CODES = {15, 9, 11, 10};
 
     private static final String TAG = "rubanled";
     private static final String DESCRIPTOR = "com.mcu.iinterface.aidl.IMcuService";
     private static final String SVC_ACTION = "com.xbs.canapp.action.mcuservice";
     private static final String SVC_PKG = "com.xbs.canapp";
     private static final int TX_REGISTER = 1, TX_UNREGISTER = 2;
-    private static final int CODE_DOORS = 15, CODE_LIGHTS = 9, CODE_BATTERY = 11;
+    private static final int CODE_DOORS = 15, CODE_LIGHTS = 9, CODE_BATTERY = 11, CODE_SPEED = 10;
     private static final long RETRY_MS = 5000;
 
     private final Context ctx;
@@ -58,7 +66,9 @@ final class DoorFeed {
     private volatile boolean running;
     private volatile IBinder binder;
     private boolean registered;
-    private boolean left, right, charging, park;
+    private boolean left, right, charging, park, hold, autosteer;
+    private String limitSw;
+    private int gear = -1;
     private int percent = -1, jhmail = -1, batterylevel = -1;
     private final Battery battery = new Battery();
 
@@ -84,13 +94,36 @@ final class DoorFeed {
                             park = lit(b, "postlight", park);
                             if (park != was) DoorFeed.this.listener.onParkLights(park);
                         }
+                        if (b.containsKey("autodrivermode")) {
+                            boolean was = autosteer;
+                            autosteer = lit(b, "autodrivermode", autosteer);
+                            if (autosteer != was) DoorFeed.this.listener.onAutosteer(autosteer);
+                        }
+                        if (b.containsKey("autohandlight")) {
+                            boolean was = hold;
+                            hold = lit(b, "autohandlight", hold);
+                            if (hold != was) DoorFeed.this.listener.onAutoHold(hold);
+                        }
                         if (b.containsKey("chargelight")) {
                             charging = lit(b, "chargelight", charging);
                             DoorFeed.this.listener.onBattery(percent, charging);
                         }
                         return;
                     }
+                    if (msg.what == CODE_SPEED) {
+                        if (!b.containsKey("speedlimitsw")) return;
+                        String v = String.valueOf(b.get("speedlimitsw"));
+                        if (!v.equals(limitSw)) {
+                            limitSw = v;
+                            DoorFeed.this.listener.onSpeedLimitSw(v);
+                        }
+                        return;
+                    }
                     if (msg.what == CODE_BATTERY) {
+                        if (b.containsKey("gear")) {
+                            int g = num(b, "gear", gear);
+                            if (g != gear) { gear = g; DoorFeed.this.listener.onGear(g); }
+                        }
                         jhmail = num(b, "jhmail", jhmail);
                         batterylevel = num(b, "batterylevel", batterylevel);
                         int p = battery.percent(jhmail, batterylevel, android.os.SystemClock.elapsedRealtime());

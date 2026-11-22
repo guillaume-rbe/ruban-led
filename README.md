@@ -12,7 +12,7 @@ la voiture ni au MCU.
 
 ## Captures (écran 1920×720 de l'A007)
 
-État du ruban et de la voiture, présence (verrouillage) et actions de test :
+État du ruban et de la voiture, présence (verrouillage) et actions (depuis la 0.17, les boutons de test sont masqués sous « Boutons de test » : « Animation d'allumage », « Animation d'extinction », « Clignotement d'alerte », « Animations à l'arrêt », qui joue les 5 animations d'arrêt l'une après l'autre) :
 
 ![État, présence et actions](docs/captures/1-etat-actions.png)
 
@@ -55,6 +55,19 @@ Documentation :
 - **Clignotement** : chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
   ouverte, et même conducteur à bord) fait clignoter le ruban (couleur d'alerte, rouge par défaut,
   100 % ↔ 1 %, 400 ms, 2 min max).
+- **Coffre d'abord en arrivant** : si en arrivant (déverrouillage, ou voiture encore vue
+  verrouillée) le coffre ou le frunk s'ouvre avant toute portière, il clignote en rouge comme
+  d'habitude (l'animation d'allumage s'arrête si elle tournait) et l'animation d'allumage est
+  gardée pour la première portière ouverte (dans les 15 min), à la place du clignotement.
+- **Marche arrière** (option, activée par défaut) : tant que la marche arrière est passée (code 11
+  `gear` = 1), un blanc doux un peu plus fort que la couleur permanente (+30 points, ×1,5 au moins ;
+  50 % la nuit), puis la couleur habituelle. Une porte qui s'ouvre clignote quand même, et le blanc
+  revient après si la marche arrière est toujours passée.
+- **Autosteer** (option, activée par défaut) : à son activation (code 9 `autodrivermode`), 1 s dans
+  le bleu de l'Autopilot de Binnacle (teinte 212°, saturation 88 %) à la luminosité du moment, puis
+  la couleur permanente. Le régulateur seul (TACC) n'a pas de champ dans le flux. Le limiteur
+  n'en a pas de connu : `speedlimitsw` (code 10) est noté dans « Derniers événements » à chaque
+  changement, pour vérifier s'il le suit.
 - **Après chaque animation** : toujours la couleur permanente (la jauge pendant la recharge), ou
   ruban éteint si la voiture est verrouillée.
 - **Warnings** : à partir de **3 flashs** de suite des deux clignotants (1 ou 2, c'est le
@@ -65,6 +78,18 @@ Documentation :
   et de chaque bout un remplissage vert qui court vers elle, en boucle (~5 s). Sur les portes,
   c'est un remplissage de l'arrière vers l'avant qui finit dans la barre (à l'avant de la porte) ;
   à 100 % tout est vert fixe.
+- **Animation à l'arrêt** (option, activée par défaut) : quand la voiture attend en Auto Hold
+  (code 9 `autohandlight`, l'icône de frein « HOLD » au feu rouge, en D) depuis plus d'**1 s**, une
+  fois sur 4 au hasard (réglable : « Arrêt : 1 sur »), une animation tirée au hasard (jamais deux
+  fois la même de suite) dans la couleur permanente, dessinée pour le tableau de bord, jusqu'au
+  départ : **respiration lente** (5 s par souffle), **croisement** (une lumière part de chaque bout,
+  elles se croisent au milieu et continuent jusqu'à l'autre bout, ~4 s), **du centre vers les
+  bouts** (~2,4 s), **scintillement** (des points s'allument au hasard sur un fond doux),
+  **vague de couleur** (la teinte ondule de ±50° autour de la couleur permanente et défile, ~4 s).
+  Elle arrive en fondu (~1 s) et repart en fondu court (~0,5 s) dès que l'Auto Hold se relâche.
+  Les portes montrent les segments 1 à 10 (même signal) : elles suivent les deux tiers droits du
+  tableau de bord. Rien si la voiture charge, qu'une autre animation tourne ou qu'une porte s'ouvre
+  (le clignotement passe devant).
 - **Veille** : quand l'écran s'éteint (voiture endormie), le ruban s'éteint, sans animation
   (en général il l'est déjà depuis le verrouillage). Utile car il est alimenté par
   l'USB de la boîte à gants, qui reste alimenté tant que la voiture est éveillée (Sentinelle

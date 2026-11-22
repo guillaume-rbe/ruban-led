@@ -2,6 +2,16 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.17
+
+- **Animation à l'arrêt** (option, activée par défaut) : au feu rouge, quand la voiture tient l'arrêt en Auto Hold depuis plus d'1 s, une fois sur 4 au hasard, une animation au hasard sur le tableau de bord jusqu'au départ : respiration lente, croisement (une lumière part de chaque bout et rejoint l'autre), du centre vers les bouts, scintillement ou vague de couleur.
+- **Coffre d'abord en arrivant** : si le coffre (ou le frunk) s'ouvre en premier en arrivant, le ruban clignote en rouge comme d'habitude (l'animation d'allumage s'arrête si elle tournait), puis l'**animation d'allumage** se joue quand une portière s'ouvre, au lieu du clignotement : on la voit en montant dans la voiture.
+- **Bleu à l'Autosteer** (option, activée par défaut) : quand l'Autosteer s'active, le ruban passe 1 s dans le bleu de l'Autopilot de Binnacle, à la luminosité du moment, puis revient à la couleur permanente.
+- **Blanc en marche arrière** (option, activée par défaut) : en marche arrière, le ruban passe en blanc doux, un peu plus fort que la couleur permanente (+30 points, 50 % la nuit), puis revient à la normale en D ou en P.
+- **Limiteur de vitesse, à vérifier** : le champ `speedlimitsw` (sens inconnu) est noté dans « Derniers événements » à chaque changement, pour voir au prochain trajet s'il suit le limiteur.
+- Réglage « Arrêt : 1 sur » (4 par défaut, 1 = à chaque arrêt).
+- **Boutons de test masqués**, sous le bouton « Boutons de test », et renommés pour être plus clairs : « Animation d'allumage », « Animation d'extinction », « Clignotement d'alerte » et le nouveau « Animations à l'arrêt » (les 5 animations l'une après l'autre, 10 s chacune à chaque appui).
+
 ## 0.16
 
 - **Mise à jour sans Internet** : le bouton « Mise à jour » ne reste plus bloqué sur « Téléchargement… ». Sans connexion, il abandonne en quelques secondes (30 s au plus) et affiche « Mise à jour impossible : pas de connexion Internet ».

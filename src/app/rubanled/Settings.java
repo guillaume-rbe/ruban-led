@@ -28,6 +28,16 @@ final class Settings {
     /** How many times the entrance / exit animations play (owner, 16 Nov: 3). */
     int animRepeat;
     /**
+     * Auto Hold (owner, 22 Nov): after 1 s held at a standstill, one time in holdChance (drawn at
+     * random) an animation picked at random plays on the dashboard until the car moves off.
+     */
+    boolean holdAnim;
+    /** Autosteer turned on: the strip flashes Binnacle's Autopilot blue for 1 s (owner, 22 Nov). */
+    boolean apFlash;
+    /** Reverse gear: a soft white, a little brighter than the steady colour (owner, 22 Nov). */
+    boolean reverseWhite;
+    int holdChance;
+    /**
      * Night mode, on by default (owner, 16 Nov): from nightStartWinter (19 h) in winter time and
      * nightStartSummer (21 h) in summer time until nightEnd (7 h), everything at nightPct (20 %).
      */
@@ -56,6 +66,10 @@ final class Settings {
         s.blinkMaxSec = p.getInt("blinkMaxSec", 120);
         s.intro = p.getBoolean("intro", true);
         s.animRepeat = p.getInt("animRepeat", 3);
+        s.holdAnim = p.getBoolean("holdAnim", true);
+        s.apFlash = p.getBoolean("apFlash", true);
+        s.reverseWhite = p.getBoolean("reverseWhite", true);
+        s.holdChance = p.getInt("holdChance", 4);
         // new keys in 0.5 so the new defaults (on, 20 %) apply to installs that had it off
         s.night = p.getBoolean("night5", true);
         s.nightStartWinter = p.getInt("nightStartWinter", 19);
@@ -82,6 +96,10 @@ final class Settings {
             .putInt("blinkMaxSec", blinkMaxSec)
             .putBoolean("intro", intro)
             .putInt("animRepeat", animRepeat)
+            .putBoolean("holdAnim", holdAnim)
+            .putBoolean("apFlash", apFlash)
+            .putBoolean("reverseWhite", reverseWhite)
+            .putInt("holdChance", holdChance)
             .putBoolean("night5", night)
             .putInt("nightStartWinter", nightStartWinter)
             .putInt("nightStartSummer", nightStartSummer)

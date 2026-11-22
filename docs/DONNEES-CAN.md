@@ -13,6 +13,10 @@ de [Binnacle](https://github.com/lotech/binnacle), qui écrit tous les codes 0 �
 | 9 | `leftlight` / `rightlight` | 1 = allumé, 2 = éteint (suivent le clignotement réel) | verrouillage, déverrouillage, warnings |
 | 9 | `postlight` | `true` / `false` | feux d'accueil : signe le déverrouillage |
 | 9 | `chargelight` | `true` pendant la charge | jauge de batterie |
+| 9 | `autodrivermode` | `true` pendant l'Autosteer (vérifié par Binnacle le 28 oct.) | 1 s de bleu à l'activation |
+| 10 | `speedlimitsw` | sens inconnu (limiteur ? affichage du panneau ?) | seulement noté dans « Derniers événements » |
+| 9 | `autohandlight` | `true` pendant l'Auto Hold (arrêt maintenu en D/R, vérifié par Binnacle le 28 oct.) | animation à l'arrêt |
+| 11 | `gear` | 0 = P, 1 = R, 3 = D (vérifié par Binnacle) | blanc en marche arrière |
 | 11 | `jhmail`, `batterylevel` | voir `Battery.java` (table de Binnacle) | pourcentage de batterie |
 
 ## Verrouillage et déverrouillage (17 nov.)

@@ -94,6 +94,19 @@ final class Zengge {
         return c;
     }
 
+    /** Each segment its own hue (0-359), saturation and brightness (0-100). */
+    static byte[] pixels(int[] hues, int[] sats, int[] vals) {
+        byte[] c = colour(0, 100, 0);
+        for (int i = 0; i < SEGMENTS && i < hues.length; i++) {
+            int hue = clamp(hues[i], 0, 359);
+            int o = 7 + i * 4;
+            c[o + 1] = (byte) (hue >> 1);
+            c[o + 2] = (byte) (((hue & 1) << 7) | clamp(sats[i], 0, 100));
+            c[o + 3] = (byte) clamp(vals[i], 0, 100);
+        }
+        return c;
+    }
+
     /** Parsed state notification, or null if this notification isn't a state report. */
     static State parse(byte[] v) {
         if (v == null || v.length < 22) return null;

@@ -49,6 +49,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     static final String ACTION_TEST_SEGMENTS = "app.rubanled.TEST_SEGMENTS";
     static final String ACTION_INTRO = "app.rubanled.INTRO";
     static final String ACTION_EXIT = "app.rubanled.EXIT";
+    /** Plays the Auto Hold animations one after the other, HOLD_TEST_MS each press. */
+    static final String ACTION_HOLD_TEST = "app.rubanled.HOLD_TEST";
     /** Extras: hue 0-359, sat 0-100, pct 1-100. Saved as the colour, applied at once. */
     static final String ACTION_SET_COLOUR = "app.rubanled.SET_COLOUR";
     /** Extra "target" of ACTION_SET_COLOUR: the steady colour, or the animations' one. */
@@ -124,6 +126,40 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private static final int GAUGE_HUE = 120;
     private static final long GAUGE_FRAME_MS = 170;
     private static final int GAUGE_FILL_FRAMES = 22, GAUGE_HOLD_FRAMES = 4, GAUGE_GAP_FRAMES = 3;
+
+    /**
+     * Auto Hold (owner, 22 Nov): held for HOLD_DELAY_MS, one time in settings.holdChance (random)
+     * one of the HoldShow animations, picked at random (never twice in a row), plays until the car
+     * moves off. It fades in from the steady colour and back to it when the hold ends.
+     */
+    private boolean autoHoldOn;
+    private boolean apFlash;
+    /** In reverse, and the reverse white is showing. */
+    private boolean inReverse, reverseLit;
+    private static final int AP_HUE = 212, AP_SAT = 88;
+    private static final long AP_FLASH_MS = 1000;
+    private boolean hold, holdEnding;
+    private HoldShow holdShow;
+    private int holdFrame, holdKind = -1, holdTestKind = -1;
+    private double holdW;
+    /** Test from the app: stops by itself after this long. */
+    private long holdUntil;
+    private static final long HOLD_DELAY_MS = 1000;
+    private static final long HOLD_TEST_MS = 10000;
+    /** Fade in over this many frames, fade back out over HOLD_OUT_FRAMES. */
+    private static final int HOLD_IN_FRAMES = 6, HOLD_OUT_FRAMES = 3;
+    private final java.util.Random rnd = new java.util.Random();
+    private final int[] holdHues = new int[Zengge.SEGMENTS], holdSats = new int[Zengge.SEGMENTS],
+        holdVals = new int[Zengge.SEGMENTS];
+
+    /**
+     * Arriving with the boot first (owner, 22 Nov): the boot (or frunk) opened since the arrival and
+     * before any door blinks red as usual, and the entrance animation plays when a door opens.
+     */
+    private long arrivalMs = -100000000L;
+    private boolean doorSinceArrival, introOwed;
+    /** An arrival (unlock) counts for the boot-then-door rule this long. */
+    private static final long ARRIVAL_MS = 15 * 60 * 1000L;
 
     /** Exit animation: the light withdraws, then the strip is off. */
     private boolean screenIsOn = true;
@@ -303,6 +339,11 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             lastSentMs = SystemClock.elapsedRealtime();
         } else if (ACTION_INTRO.equals(a)) {
             playIntro();
+        } else if (ACTION_HOLD_TEST.equals(a)) {
+            stopAll();
+            power(true);
+            holdTestKind = (holdTestKind + 1) % HoldShow.COUNT;
+            startHold(holdTestKind, HOLD_TEST_MS);
         } else if (ACTION_EXIT.equals(a)) {
             if (strip == null || !strip.on) { power(true); colour(settings.defaultHue, settings.defaultSat, targetPct(), true); }
             playExit();
@@ -370,7 +411,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         settings.blinkSat = Math.max(0, Math.min(100, sat));
         settings.blinkPct = Math.max(1, Math.min(100, pct));
         settings.save(this);
-        if (blinking || intro || exiting) return;     // the running animation picks it up
+        if (blinking || intro || exiting || hold || apFlash || reverseLit) return;     // the running animation picks it up
         if (strip == null || !strip.on) power(true);
         colour(settings.blinkHue, settings.blinkSat, animPct(), false);
         main.removeCallbacks(previewEnd);
@@ -379,7 +420,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     private final Runnable previewEnd = new Runnable() {
         @Override public void run() {
-            if (blinking || intro || exiting) return;
+            if (blinking || intro || exiting || hold || apFlash || reverseLit) return;
             colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
         }
     };
@@ -390,7 +431,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         settings.defaultSat = Math.max(0, Math.min(100, sat));
         settings.dayPct = Math.max(1, Math.min(100, pct));
         settings.save(this);
-        if (blinking || intro || exiting) return;      // the animation ends on the new colour
+        if (blinking || intro || exiting || hold || apFlash || reverseLit) return;      // the animation ends on the new colour
         if (strip == null || !strip.on) power(true);
         colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
     }
@@ -418,6 +459,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             return;
         }
         if (charging) { showGauge(); return; }
+        if (inReverse && settings.reverseWhite && screenIsOn) {
+            showReverse();                   // still in reverse (a door blinked): white again
+            if (reverseLit) return;
+        }
         if (!screenIsOn && ownerThere == null) {
             // lock state not known: the screen tells whether the car sleeps
             power(false);
@@ -433,6 +478,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             return;
         }
         introWantedMs = 0;
+        stopHold();
         gauge = false;
         main.removeCallbacks(gaugeTick);
         exiting = false;
@@ -484,12 +530,13 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     private final Runnable introFinal = new Runnable() {
         @Override public void run() {
-            if (blinking || intro || exiting || gauge || away()) return;
+            if (blinking || intro || exiting || gauge || hold || apFlash || reverseLit || away()) return;
             colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
         }
     };
 
     private void startBlink(long maxSec) {
+        stopHold();
         gauge = false;
         main.removeCallbacks(gaugeTick);
         exiting = false;
@@ -534,6 +581,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** Stops every animation and the gauge, without putting anything back. */
     private void stopAll() {
+        stopHold();
         gauge = false;
         main.removeCallbacks(gaugeTick);
         exiting = false;
@@ -600,7 +648,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     /** At a night/day change: same colour, brightness of the hour (once; manual changes stay). */
     private void applyBrightness() {
         if (!brightnessPending || !link.isReady() || gauge || exiting) return;
-        if (blinking || intro) {
+        if (blinking || intro || hold || apFlash || reverseLit) {
             brightnessPending = false;     // the animation ends on the brightness of the hour
             return;
         }
@@ -654,13 +702,40 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         doorsOpen = open;
         if (opened != 0) {
             event(describe(opened));
+            boolean door = (opened & 0xf0) != 0;      // a door, not only the boot / frunk
+            long now = SystemClock.elapsedRealtime();
+            // arriving: the car was locked, or it was unlocked lately and no door has opened since
+            boolean arriving = away() || (!doorSinceArrival && now - arrivalMs < ARRIVAL_MS);
             // a door can only open unlocked: if the unlock was missed (or a flash was mistaken for
-            // a lock), this is the arrival, even during an animation (17 Nov: the strip went dark)
-            if (away()) { onPresence(true, "Porte ouverte voiture verrouillée"); return; }
-            if (intro) return;                          // the entrance animation goes on
-            // otherwise always the alert blink (owner, 17 Nov): the animations come only from the
-            // lock / unlock detection, never from a door
+            // a lock), this is the arrival, even during an animation (17 Nov: the strip went dark).
+            // The boot first: no entrance yet, it waits for the door (below)
+            if (away()) {
+                onPresence(true, "Ouverture voiture verrouillée", door || !settings.intro);
+                if (door) { doorSinceArrival = true; return; }
+            }
+            if (door) {
+                doorSinceArrival = true;
+                // the owner opened the boot on arriving and now gets in: the entrance he never
+                // saw from the boot (owner, 22 Nov), in place of the blink
+                if (introOwed) {
+                    introOwed = false;
+                    if (now - arrivalMs < ARRIVAL_MS) {
+                        event("Portière après le coffre : animation d'allumage");
+                        playIntro();
+                        return;
+                    }
+                }
+                if (intro) return;                      // the entrance animation goes on
+            } else if (arriving && settings.intro) {
+                // boot / frunk on arriving: the usual red blink now (it stops the entrance if it
+                // was playing), the entrance when a door opens
+                introOwed = true;
+            } else if (intro) {
+                return;
+            }
+            // otherwise always the alert blink (owner, 17 Nov)
             if (settings.doorBlink) startBlink(settings.blinkMaxSec);
+            else if (introOwed) { stopAll(); steady(); }      // no blink wanted: lit, entrance later
         } else if (!open && !hazardOn) {
             stopBlink();
         }
@@ -668,13 +743,22 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** The owner arrives (unlocked) or leaves (locked). */
     private void onPresence(boolean there, String why) {
+        onPresence(there, why, true);
+    }
+
+    /** entrance: play the entrance animation now (false: the boot opened first, see onDoors). */
+    private void onPresence(boolean there, String why, boolean entrance) {
         presenceText = "Présence : " + (there ? "déverrouillée (conducteur là)" : "verrouillée (absent)");
         if (ownerThere != null && ownerThere == there) return;
         ownerThere = there;
         Settings.savePresence(this, there);
         event(why);
+        introOwed = false;
         if (there) {
             lastUnlockMs = SystemClock.elapsedRealtime();
+            arrivalMs = lastUnlockMs;
+            doorSinceArrival = false;
+            if (!entrance) return;               // onDoors blinks for the boot and owes the entrance
             // the owner is back: lit, then the steady colour (an entrance already playing just
             // goes on: it ends on the steady colour now that the car counts as unlocked)
             if (intro) return;
@@ -740,6 +824,150 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (on && away()) onPresence(true, "Déverrouillage (feux d'accueil)");
     }
 
+    /**
+     * Autosteer on: 1 s in Binnacle's Autopilot blue (CentreView.AP_BLUE 0xFF1F86FF = hue 212,
+     * sat 88) at the brightness the strip already has, then back (owner, 22 Nov).
+     */
+    @Override public void onAutosteer(boolean on) {
+        event(on ? "Autosteer activé" : "Autosteer désactivé");
+        if (!on || !settings.apFlash || !link.isReady() || !present() || !screenIsOn || blinking || intro || exiting
+                || gauge || hold || apFlash || strip == null || !strip.on) return;
+        int pct = strip.hasColour && strip.val > 0 ? strip.val : targetPct();
+        apFlash = true;
+        link.clearQueue();
+        colour(AP_HUE, AP_SAT, pct, false);
+        main.removeCallbacks(apFlashEnd);
+        main.postDelayed(apFlashEnd, AP_FLASH_MS);
+    }
+
+    private final Runnable apFlashEnd = new Runnable() {
+        @Override public void run() {
+            if (!apFlash) return;
+            apFlash = false;
+            afterAnimation();
+        }
+    };
+
+    /** Reverse gear (code 11 gear = 1): a soft white while it lasts, then the usual colour. */
+    @Override public void onGear(int gear) {
+        boolean r = gear == 1;
+        if (r == inReverse) return;
+        inReverse = r;
+        event(r ? "Marche arrière" : "Fin de marche arrière");
+        if (r) showReverse();
+        else if (reverseLit) { reverseLit = false; afterAnimation(); }
+    }
+
+    /** The reverse white, if wanted and nothing else is playing. */
+    private void showReverse() {
+        if (!inReverse || !settings.reverseWhite || !link.isReady() || !present() || !screenIsOn || blinking || intro
+                || exiting || gauge || hold || apFlash) return;
+        int pct = targetPct();
+        int white = Math.min(100, Math.max(pct + 30, Math.round(pct * 1.5f)));   // 20 % at night: 50 %
+        if (strip == null || !strip.on) power(true);
+        reverseLit = true;
+        ruleText = "Marche arrière : blanc";
+        colour(0, 0, white, false);
+    }
+
+    /** speedlimitsw (code 10), meaning not known yet: only logged, to see whether the limiter moves it. */
+    @Override public void onSpeedLimitSw(String value) {
+        event("speedlimitsw = " + value);
+    }
+
+    /** Auto Hold on or off (code 9 "autohandlight"): after 1 s held, maybe an animation. */
+    @Override public void onAutoHold(boolean on) {
+        if (on == autoHoldOn) return;
+        autoHoldOn = on;
+        main.removeCallbacks(holdStart);
+        if (on) {
+            main.postDelayed(holdStart, HOLD_DELAY_MS);
+        } else if (hold && holdUntil == 0 && !holdEnding) {
+            holdEnding = true;              // the car moves off: back to the steady colour
+            event("Auto Hold relâché");
+        }
+    }
+
+    private final Runnable holdStart = new Runnable() {
+        @Override public void run() {
+            if (!autoHoldOn || !settings.holdAnim) return;
+            if (!link.isReady() || !present() || !screenIsOn || blinking || intro || exiting || gauge || charging
+                    || hold || inReverse || strip == null || !strip.on) return;
+            int chance = Math.max(1, settings.holdChance);
+            if (rnd.nextInt(chance) != 0) {
+                event("Auto Hold : pas d'animation cette fois (1 sur " + chance + ")");
+                return;
+            }
+            // at random, but never the same one twice in a row
+            int k = rnd.nextInt(holdKind < 0 ? HoldShow.COUNT : HoldShow.COUNT - 1);
+            if (holdKind >= 0 && k >= holdKind) k++;
+            startHold(k, 0);
+        }
+    };
+
+    /** testMs > 0: a test from the app, ending by itself; 0: until the Auto Hold ends. */
+    private void startHold(int kind, long testMs) {
+        holdKind = kind;
+        holdShow = new HoldShow(kind, rnd);
+        hold = true;
+        holdEnding = false;
+        holdFrame = 0;
+        holdW = 0;
+        holdUntil = testMs > 0 ? SystemClock.elapsedRealtime() + testMs : 0;
+        link.clearQueue();
+        ruleText = "Auto Hold : " + HoldShow.NAMES[kind];
+        event((testMs > 0 ? "Test arrêt : " : "Auto Hold : ") + HoldShow.NAMES[kind]);
+        main.removeCallbacks(holdTick);
+        main.post(holdTick);
+    }
+
+    /** Stops the Auto Hold animation and the Autosteer flash at once, without putting anything back. */
+    private void stopHold() {
+        main.removeCallbacks(apFlashEnd);
+        apFlash = false;
+        reverseLit = false;
+        main.removeCallbacks(holdStart);
+        main.removeCallbacks(holdTick);
+        if (hold) ruleText = "";
+        hold = false;
+        holdEnding = false;
+        holdShow = null;
+    }
+
+    private final Runnable holdTick = new Runnable() {
+        @Override public void run() {
+            if (!hold) return;
+            if (holdUntil > 0 && SystemClock.elapsedRealtime() > holdUntil) holdEnding = true;
+            if (holdEnding) {
+                holdW -= 1.0 / HOLD_OUT_FRAMES;
+                if (holdW <= 0) {
+                    stopHold();
+                    link.clearQueue();
+                    afterAnimation();
+                    return;
+                }
+            } else {
+                holdW = Math.min(1, holdW + 1.0 / HOLD_IN_FRAMES);
+            }
+            if (holdFrame % 20 == 0) awake(10000);
+            int hue = settings.defaultHue, sat = settings.defaultSat, pct = targetPct();
+            holdShow.frame(holdFrame, hue, sat, pct, holdHues, holdSats, holdVals);
+            // fade between the steady colour and the animation (smoothstep of holdW)
+            double w = holdW * holdW * (3 - 2 * holdW);
+            for (int i = Zengge.SEGMENTS - 1; i >= 0; i--) {  // from the end: 16-20 copy 15 before it changes
+                int j = Math.min(i, HoldShow.N - 1);        // segments 16-20: not shown anywhere
+                int dh = ((holdHues[j] - hue + 540) % 360) - 180;
+                holdHues[i] = ((hue + (int) Math.round(w * dh)) % 360 + 360) % 360;
+                holdSats[i] = (int) Math.round(sat + w * (holdSats[j] - sat));
+                holdVals[i] = (int) Math.round(pct + w * (holdVals[j] - pct));
+            }
+            link.send(Zengge.pixels(holdHues, holdSats, holdVals));
+            lastSentMs = SystemClock.elapsedRealtime();
+            holdFrame++;
+            main.postDelayed(this, HoldShow.FRAME_MS);
+        }
+    };
+
     private final Runnable hazardCheck = new Runnable() {
         @Override public void run() {
             if (!hazardOn) return;
@@ -775,6 +1003,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     /** Green gauge of the battery % while charging, only with the owner there (unlocked). */
     private void showGauge() {
         if (blinking || intro || !link.isReady() || !present()) return;
+        stopHold();
         exiting = false;
         main.removeCallbacks(exitTick);
         if (!gauge) { power(true); gaugeFrame = 0; }
