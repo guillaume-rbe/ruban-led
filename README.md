@@ -120,7 +120,7 @@ n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails da
 - Les règles tournent sur leur propre fil de priorité haute (plus sur le fil de l'écran), le fil
   Bluetooth aussi ; la connexion BLE est en intervalle court (demandé dès la connexion) et se refait
   toutes les 2,5 s.
-- **Pas de retard qui s'accumule** (0.17) : une image d'animation qui attend encore son envoi est
+- **Pas de retard qui s'accumule** (0.18) : une image d'animation qui attend encore son envoi est
   remplacée par la suivante au lieu d'être envoyée après (seule la plus récente compte), donc le
   ruban n'a jamais plus d'une image de retard, même si le Bluetooth ralentit.
 - Le ruban accuse réception de chaque commande : la pause entre deux envois est passée de 40 à
@@ -128,6 +128,12 @@ n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails da
 - « Allumer » n'est plus envoyé quand le ruban est déjà allumé : une porte qui s'ouvre clignote un
   aller-retour Bluetooth plus tôt. Après une perte de connexion, l'état du ruban est redemandé et le
   premier envoi le rallume quoi qu'il arrive.
+- **Au réveil de la voiture** (0.18), l'app se connecte au ruban tout de suite, puis réessaie toutes
+  les 0,5 s pendant 30 s (2,5 s sinon).
+- **Commande couleur courte** (0.18) : une couleur unie part en 13 octets (`3B A1 …`, même forme que
+  allumer/éteindre) au lieu de 87. Pas capturée depuis l'app ZENGGE : vérifiée une fois sur le ruban
+  (envoyée à 1 point de luminosité près, puis l'état du ruban est relu) et utilisée seulement si
+  elle marche ; le résultat est noté dans « Derniers événements ».
 - Service au premier plan (notification « Ruban LED actif »), relancé au démarrage, après une mise à
   jour et toutes les 15 min s'il a été arrêté ; le processeur reste éveillé pendant les animations.
 - Au premier lancement, Android demande de laisser l'app hors de l'optimisation de la batterie :

@@ -30,6 +30,8 @@ final class LedLink {
     private static final String TAG = "rubanled";
     /** Reconnect quickly: the strip is powered with the car, a door opened right after must blink. */
     private static final long RETRY_MS = 2500;
+    /** Right after the car wakes (the strip powers up with it): retry this often, for FAST_WINDOW_MS. */
+    private static final long FAST_RETRY_MS = 500, FAST_WINDOW_MS = 30000;
     /**
      * Pause after each write. With a response the strip has already acked the command, so a short
      * one is enough; without, the pause is all that keeps us from flooding it.
@@ -71,6 +73,9 @@ final class LedLink {
     /** With a response when FF01 allows it (0x0C on this strip): the strip acks each command. */
     private int writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE;
     private volatile boolean ready;
+    /** Waiting for the reconnect timer (no attempt under way). */
+    private boolean waitingRetry;
+    private long fastUntil;
     private boolean writing;
     /** This connection has gone ready (the descriptor callback or the fallback timer). */
     private boolean readied;
@@ -110,6 +115,22 @@ final class LedLink {
     void quit() {
         stop();
         thread.quitSafely();
+    }
+
+    /**
+     * The car woke (screen on): the strip is powering up. Connect now instead of at the next
+     * retry, and retry fast for a while (0.18). An attempt already under way is left alone: it
+     * succeeds as soon as the strip advertises.
+     */
+    void wake() {
+        h.post(new Runnable() {
+            @Override public void run() {
+                fastUntil = android.os.SystemClock.elapsedRealtime() + FAST_WINDOW_MS;
+                if (!started || ready || !waitingRetry) return;
+                h.removeCallbacks(reconnect);
+                reconnect.run();
+            }
+        });
     }
 
     boolean isReady() {
@@ -177,11 +198,15 @@ final class LedLink {
 
     private void retry() {
         h.removeCallbacks(reconnect);
-        if (started) h.postDelayed(reconnect, RETRY_MS);
+        if (!started) return;
+        waitingRetry = true;
+        boolean fast = android.os.SystemClock.elapsedRealtime() < fastUntil;
+        h.postDelayed(reconnect, fast ? FAST_RETRY_MS : RETRY_MS);
     }
 
     private final Runnable reconnect = new Runnable() {
         @Override public void run() {
+            waitingRetry = false;
             closeGatt();
             connect();
         }

@@ -75,6 +75,24 @@ final class Zengge {
         return c;
     }
 
+    /**
+     * The whole strip one colour in a short command (13 bytes instead of 87), same layout as
+     * power(): 3B A1 T1 S V 00 .. 00 checksum. Not captured from the ZENGGE app: taken from other
+     * controllers of the same family, so the service checks it on the strip once (the state reply
+     * must show the colour) before using it, and keeps the long command otherwise (0.18).
+     */
+    static byte[] shortColour(int hue, int sat, int val) {
+        hue = clamp(hue, 0, 359);
+        byte[] c = new byte[13];
+        c[0] = 0x3b;
+        c[1] = (byte) 0xa1;
+        c[2] = (byte) (hue >> 1);
+        c[3] = (byte) clamp(sat, 0, 100);
+        c[4] = (byte) clamp(val, 0, 100);
+        c[12] = checksum(c, 12);
+        return c;
+    }
+
     /** One colour per segment (hues.length == SEGMENTS), full saturation. */
     static byte[] segments(int[] hues, int val) {
         byte[] c = colour(0, 100, val);

@@ -36,6 +36,8 @@ final class Settings {
     boolean apFlash;
     /** Reverse gear: a soft white, a little brighter than the steady colour (owner, 22 Nov). */
     boolean reverseWhite;
+    /** Short colour command (0.18): -1 not checked on this strip yet, 0 not understood, 1 works. */
+    int shortColour;
     int holdChance;
     /**
      * Night mode, on by default (owner, 16 Nov): from nightStartWinter (19 h) in winter time and
@@ -69,6 +71,7 @@ final class Settings {
         s.holdAnim = p.getBoolean("holdAnim", true);
         s.apFlash = p.getBoolean("apFlash", true);
         s.reverseWhite = p.getBoolean("reverseWhite", true);
+        s.shortColour = p.getInt("shortColour", -1);
         s.holdChance = p.getInt("holdChance", 4);
         // new keys in 0.5 so the new defaults (on, 20 %) apply to installs that had it off
         s.night = p.getBoolean("night5", true);
@@ -99,6 +102,7 @@ final class Settings {
             .putBoolean("holdAnim", holdAnim)
             .putBoolean("apFlash", apFlash)
             .putBoolean("reverseWhite", reverseWhite)
+            .putInt("shortColour", shortColour)
             .putInt("holdChance", holdChance)
             .putBoolean("night5", night)
             .putInt("nightStartWinter", nightStartWinter)

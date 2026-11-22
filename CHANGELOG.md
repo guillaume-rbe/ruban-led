@@ -2,6 +2,13 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.18
+
+- **Plus réactif** : les images d'animation ne s'accumulent plus quand le Bluetooth ralentit (la plus récente remplace celle qui attend), pause entre deux envois réduite (40 → 8 ms, le ruban accuse réception), ruban prêt dès que ses notifications sont activées, et plus d'« allumer » inutile avant le clignotement d'une porte (il part un envoi plus tôt).
+- **Connexion au réveil** : quand la voiture se réveille (écran allumé), l'app se connecte au ruban tout de suite au lieu d'attendre le prochain essai (jusqu'à 2,5 s), puis réessaie toutes les 0,5 s pendant 30 s.
+- **Commande couleur courte** : une couleur unie part en 13 octets au lieu de 87. Cette commande n'a pas été capturée depuis l'app ZENGGE : l'app la vérifie une fois sur le ruban (« Derniers événements » dit si elle est reconnue) et garde la commande longue sinon.
+- Code : une seule vérification « une animation tourne déjà » pour toutes les règles ; changer une couleur ne fait plus clignoter la jauge de recharge.
+
 ## 0.17
 
 - **Animation à l'arrêt** (option, activée par défaut) : au feu rouge, quand la voiture tient l'arrêt en Auto Hold depuis plus d'1 s, une fois sur 4 au hasard, une animation au hasard sur le tableau de bord jusqu'au départ : respiration lente, croisement (une lumière part de chaque bout et rejoint l'autre), du centre vers les bouts, scintillement ou vague de couleur.
@@ -9,7 +16,6 @@ Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la re
 - **Bleu à l'Autosteer** (option, activée par défaut) : quand l'Autosteer s'active, le ruban passe 1 s dans le bleu de l'Autopilot de Binnacle, à la luminosité du moment, puis revient à la couleur permanente.
 - **Blanc en marche arrière** (option, activée par défaut) : en marche arrière, le ruban passe en blanc doux, un peu plus fort que la couleur permanente (+30 points, 50 % la nuit), puis revient à la normale en D ou en P.
 - **Limiteur de vitesse, à vérifier** : le champ `speedlimitsw` (sens inconnu) est noté dans « Derniers événements » à chaque changement, pour voir au prochain trajet s'il suit le limiteur.
-- **Plus réactif** : les images d'animation ne s'accumulent plus quand le Bluetooth ralentit (la plus récente remplace celle qui attend), pause entre deux envois réduite (40 → 8 ms, le ruban accuse réception), ruban prêt dès que ses notifications sont activées, et plus d'« allumer » inutile avant le clignotement d'une porte (il part un envoi plus tôt).
 - Réglage « Arrêt : 1 sur » (4 par défaut, 1 = à chaque arrêt).
 - **Boutons de test masqués**, sous le bouton « Boutons de test », et renommés pour être plus clairs : « Animation d'allumage », « Animation d'extinction », « Clignotement d'alerte » et le nouveau « Animations à l'arrêt » (les 5 animations l'une après l'autre, 10 s chacune à chaque appui).
 

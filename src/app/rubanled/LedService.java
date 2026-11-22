@@ -242,6 +242,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             } else {
                 event("Écran allumé");
                 screenIsOn = true;
+                link.wake();            // the strip powers up with the car: connect now
                 if (exiting && !away()) {
                     exiting = false;
                     main.removeCallbacks(exitTick);
@@ -455,6 +456,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         // a second time: if a frame was lost, the strip must not stay half lit
         main.postDelayed(introFinal, 700);
         queryLater();
+        probeShortLater();
     }
 
     /**
@@ -628,7 +630,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** track: remember it as the strip's colour (not for blink frames). */
     private void colour(int hue, int sat, int val, boolean track) {
-        link.send(Zengge.colour(hue, sat, val));
+        // the short command once it is known to work on this strip, the long one otherwise
+        link.send(settings.shortColour == 1 ? Zengge.shortColour(hue, sat, val) : Zengge.colour(hue, sat, val));
         lastSentMs = SystemClock.elapsedRealtime();
         if (!track) return;
         if (strip == null) strip = new Zengge.State();
@@ -681,6 +684,68 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         }
     }
 
+    // ---- short colour command check (0.18) ----
+
+    /**
+     * Once per strip: with the steady colour showing, send it with the short command at a
+     * brightness one point off (not visible), then ask the strip. If its reply shows that
+     * brightness, the short command works and is used from then on; otherwise the long one stays.
+     * The answer is saved; the steady colour is put back with the long command either way.
+     */
+    private boolean probing;
+    private int probeHue, probeSat, probeVal;
+    private static final long PROBE_WAIT_MS = 2500;
+
+    private void probeShortLater() {
+        if (settings.shortColour != -1 || probing) return;
+        main.removeCallbacks(probeStart);
+        main.postDelayed(probeStart, 4000);
+    }
+
+    private final Runnable probeStart = new Runnable() {
+        @Override public void run() {
+            if (settings.shortColour != -1 || probing || !link.isReady() || busy() || away() || strip == null
+                    || !strip.on || !strip.hasColour) return;
+            probeHue = strip.hue & ~1;      // the short command carries the hue in steps of 2
+            probeSat = strip.sat;
+            probeVal = strip.val > 50 ? strip.val - 1 : strip.val + 1;
+            probing = true;
+            link.send(Zengge.shortColour(probeHue, probeSat, probeVal));
+            lastSentMs = SystemClock.elapsedRealtime();
+            main.postDelayed(probeAsk, STALE_MS + 300);
+            main.postDelayed(probeGiveUp, PROBE_WAIT_MS + STALE_MS);
+        }
+    };
+
+    private final Runnable probeAsk = new Runnable() {
+        @Override public void run() { if (probing) link.query(); }
+    };
+
+    private final Runnable probeGiveUp = new Runnable() {
+        @Override public void run() { if (probing) probeResult(false); }
+    };
+
+    /** A state reply while checking. */
+    private void probeReply(Zengge.State s) {
+        boolean ok = s.on && s.hasColour && Math.abs(s.val - probeVal) <= 0 && Math.abs(s.hue - probeHue) <= 2;
+        probeResult(ok);
+    }
+
+    private void probeResult(boolean ok) {
+        probing = false;
+        main.removeCallbacks(probeAsk);
+        main.removeCallbacks(probeGiveUp);
+        settings.shortColour = ok ? 1 : 0;
+        settings.save(this);
+        event(ok ? "Commande couleur courte : reconnue, utilisée désormais"
+                 : "Commande couleur courte : non reconnue, commande longue gardée");
+        if (!busy() && !away()) {
+            // put the exact steady colour back with the long command (whatever the short one did)
+            link.send(Zengge.colour(settings.defaultHue, settings.defaultSat, targetPct()));
+            lastSentMs = SystemClock.elapsedRealtime();
+        }
+    }
+
     // ---- callbacks ----
 
     @Override public void onLinkState(final boolean ready, final String text) {
@@ -709,6 +774,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         main.post(new Runnable() {
             @Override public void run() {
                 if (SystemClock.elapsedRealtime() - lastSentMs < STALE_MS) return;
+                if (probing) { probeReply(s); return; }
                 strip = s;
                 stripText = "Ruban : " + s;
                 applyBrightness();
@@ -944,6 +1010,12 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** Stops the Auto Hold animation and the Autosteer flash at once, without putting anything back. */
     private void stopHold() {
+        if (probing) {               // an animation takes over: check again another time
+            probing = false;
+            main.removeCallbacks(probeAsk);
+            main.removeCallbacks(probeGiveUp);
+        }
+        main.removeCallbacks(probeStart);
         main.removeCallbacks(apFlashEnd);
         apFlash = false;
         reverseLit = false;
