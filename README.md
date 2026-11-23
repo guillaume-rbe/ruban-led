@@ -80,15 +80,17 @@ Documentation :
   et de chaque bout un remplissage vert qui court vers elle, en boucle (~5 s). Sur les portes,
   c'est un remplissage de l'arrière vers l'avant qui finit dans la barre (à l'avant de la porte) ;
   à 100 % tout est vert fixe.
-- **Animation à l'arrêt** (option, activée par défaut) : quand la voiture attend en Auto Hold
-  (code 9 `autohandlight`, l'icône de frein « HOLD » au feu rouge, en D) depuis plus d'**1 s**, une
+- **Animation à l'arrêt** (option, activée par défaut) : quand la voiture est arrêtée en D
+  (`carspeed` = 0) après avoir roulé, comme au feu en Auto Hold (le boîtier CAN ne transmet pas
+  l'Auto Hold : `autohandlight` est le frein de parking), depuis plus d'**1 s**. Après une marche
+  arrière (manœuvres), un arrêt ne compte qu'une fois repartie au-dessus de 15 km/h. Alors, une
   fois sur 4 au hasard (réglable : « Arrêt : 1 sur »), une animation tirée au hasard (jamais deux
   fois la même de suite) dans la couleur permanente, dessinée pour le tableau de bord, jusqu'au
   départ : **respiration lente** (5 s par souffle), **croisement** (une lumière part de chaque bout,
   elles se croisent au milieu et continuent jusqu'à l'autre bout, ~4 s), **du centre vers les
   bouts** (~2,4 s), **scintillement** (des points s'allument au hasard sur un fond doux),
   **vague de couleur** (la teinte ondule de ±50° autour de la couleur permanente et défile, ~4 s).
-  Elle arrive en fondu (~1 s) et repart en fondu court (~0,5 s) dès que l'Auto Hold se relâche.
+  Elle arrive en fondu (~1 s) et repart en fondu court (~0,5 s) dès que la voiture repart.
   Les portes montrent les segments 1 à 10 (même signal) : elles suivent les deux tiers droits du
   tableau de bord. Rien si la voiture charge, qu'une autre animation tourne ou qu'une porte s'ouvre
   (le clignotement passe devant).

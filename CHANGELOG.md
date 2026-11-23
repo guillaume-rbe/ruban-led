@@ -8,6 +8,7 @@ Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la re
 - **Couleurs en trois barres** dans l'app, comme sur la page iPhone : teinte, saturation et luminosité, chacune avec son dégradé, au lieu des roues (toujours verrouillées par défaut).
 - **« Alerte à l'ouverture »** : une seule option pour les portières, le coffre et le frunk, au lieu de « Clignoter quand une porte s'ouvre » et « … aussi coffre et frunk ».
 - **Mode nuit** : début (hiver, été), fin et luminosité réglables sous un bouton « Horaires et luminosité », dans l'app et sur la page iPhone, avec leur propre bouton « Enregistrer les horaires ».
+- **Plus d'animation d'arrêt pendant les manœuvres** : après une marche arrière, un arrêt en D ne compte qu'une fois la voiture repartie au-dessus de 15 km/h (le 23 nov., en alternant D et R pour se garer, une animation partait pour 0,3 s). Depuis P, le premier arrêt compte comme avant.
 - Texte de la règle « Blanc en marche arrière » : le blanc respire.
 
 ## 0.24

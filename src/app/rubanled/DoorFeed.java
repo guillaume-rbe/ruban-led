@@ -86,13 +86,23 @@ final class DoorFeed {
     private boolean moved, stopped;
     private int speed = -1;
     static final int STOP_ARM_KMH = 1;   // any move, like the Auto Hold (tests in the garage: 1-2 km/h)
+    /**
+     * After a reverse, stops count only once the car has really driven off (owner, 23 Nov: going
+     * D / R / D to park, a stop in D started an Auto Hold animation cut 0.3 s later, 16:31:58).
+     * Cleared at this speed in D, or in P (a new drive from P arms at STOP_ARM_KMH again).
+     */
+    static final int MANOEUVRE_ARM_KMH = 15;
+    private boolean afterReverse;
     private int percent = -1, jhmail = -1, batterylevel = -1;
     private final Battery battery = new Battery();
 
 
     /** A stop in Drive after driving counts as an Auto Hold (see moved / stopped). */
     private void stopCheck() {
-        if (speed >= STOP_ARM_KMH) moved = true;
+        if (gear == 1) afterReverse = true;              // manoeuvring
+        if (gear == 0) afterReverse = false;             // parked: the next drive is a new one
+        if (gear == 3 && speed >= MANOEUVRE_ARM_KMH) afterReverse = false;
+        if (gear == 3 && speed >= (afterReverse ? MANOEUVRE_ARM_KMH : STOP_ARM_KMH)) moved = true;
         if (gear != 3) moved = false;                    // P, R or N: a new drive must start
         boolean now = moved && gear == 3 && speed == 0;
         if (now == stopped) return;
