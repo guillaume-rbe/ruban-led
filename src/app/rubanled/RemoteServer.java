@@ -36,6 +36,8 @@ final class RemoteServer {
     static final int PORT = 8080;
     /** Shown in the app: the address to open on the iPhone, or why there is none. */
     static volatile String addressText = "";
+    /** Counts colour and rule changes made from the iPhone, once applied: the app's screen redraws them. */
+    static volatile int changes;
 
     interface Host {
         /** Runs an intent through LedService.handle, on its rules thread. */

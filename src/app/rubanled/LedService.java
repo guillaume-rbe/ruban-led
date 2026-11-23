@@ -326,7 +326,12 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             remoteCode = code;
             remote = new RemoteServer(this, new RemoteServer.Host() {
                 @Override public void handle(final Intent i) {
-                    main.post(new Runnable() { @Override public void run() { LedService.this.handle(i); } });
+                    main.post(new Runnable() {
+                        @Override public void run() {
+                            LedService.this.handle(i);
+                            RemoteServer.changes++;      // the app's screen shows the change (MainActivity.refresh)
+                        }
+                    });
                 }
                 @Override public void event(final String what) {
                     main.post(new Runnable() { @Override public void run() { LedService.this.event(what); } });

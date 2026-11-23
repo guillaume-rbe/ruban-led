@@ -161,27 +161,27 @@ public final class MainActivity extends Activity {
         actions.addView(testRow, r1);
 
         LinearLayout rules = card(right, "Règles");
-        toggle(rules, "Animations ×3", "Allumage au déverrouillage, extinction au verrouillage (sinon allumé / éteint d'un coup)",
-            s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } });
-        toggle(rules, "Animation à l'arrêt",
+        bind("intro", toggle(rules, "Animations ×3", "Allumage au déverrouillage, extinction au verrouillage (sinon allumé / éteint d'un coup)",
+            s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } }));
+        bind("holdAnim", toggle(rules, "Animation à l'arrêt",
             "Arrêté en D (0 km/h) après avoir roulé, depuis 1 s : une fois sur N au hasard, une animation au hasard sur le tableau de bord, jusqu'au départ (le boîtier CAN ne transmet pas l'Auto Hold)",
-            s.holdAnim, new Toggle() { public void set(Settings x, boolean v) { x.holdAnim = v; } });
-        toggle(rules, "Bleu à l'activation de l'Autosteer", "1 s dans le bleu de l'Autopilot de Binnacle, à la luminosité du moment",
-            s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } });
-        toggle(rules, "Blanc en marche arrière", "Un blanc doux, un peu plus fort que la couleur permanente, le temps de la marche arrière",
-            s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } });
-        toggle(rules, "Écran : position activée (plus d'alerte Google)",
+            s.holdAnim, new Toggle() { public void set(Settings x, boolean v) { x.holdAnim = v; } }));
+        bind("apFlash", toggle(rules, "Bleu à l'activation de l'Autosteer", "1 s dans le bleu de l'Autopilot de Binnacle, à la luminosité du moment",
+            s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } }));
+        bind("reverseWhite", toggle(rules, "Blanc en marche arrière", "Un blanc qui respire, un peu plus fort que la couleur permanente, le temps de la marche arrière",
+            s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } }));
+        bind("unitQuiet", toggle(rules, "Écran : position activée (plus d'alerte Google)",
             "Position en mode « appareil seul » (GPS, sans scans Wi-Fi ni réseau Google ; pas de module branché, donc rien ne tourne) : la fenêtre « accès à la position désactivé » de Google ne s'affiche plus au démarrage. Désactiver remet le mode d'avant.",
-            s.unitQuiet, new Toggle() { public void set(Settings x, boolean v) { x.unitQuiet = v; } });
-        toggle(rules, "Clignoter quand une porte s'ouvre", null,
-            s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } });
-        toggle(rules, "… aussi coffre et frunk", null,
-            s.bootAndFrunk, new Toggle() { public void set(Settings x, boolean v) { x.bootAndFrunk = v; } });
-        toggle(rules, "Clignoter avec les warnings", null,
-            s.hazard, new Toggle() { public void set(Settings x, boolean v) { x.hazard = v; } });
-        toggle(rules, "Musique à la connexion CarPlay",
+            s.unitQuiet, new Toggle() { public void set(Settings x, boolean v) { x.unitQuiet = v; } }));
+        bind("doorBlink", toggle(rules, "Clignoter quand une porte s'ouvre", null,
+            s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } }));
+        bind("bootAndFrunk", toggle(rules, "… aussi coffre et frunk", null,
+            s.bootAndFrunk, new Toggle() { public void set(Settings x, boolean v) { x.bootAndFrunk = v; } }));
+        bind("hazard", toggle(rules, "Clignoter avec les warnings", null,
+            s.hazard, new Toggle() { public void set(Settings x, boolean v) { x.hazard = v; } }));
+        bind("autoPlay", toggle(rules, "Musique à la connexion CarPlay",
             "Relance la dernière appli audio de l'iPhone (YouTube Music…) si rien ne joue 3 s après la connexion",
-            s.autoPlay, new Toggle() { public void set(Settings x, boolean v) { x.autoPlay = v; } });
+            s.autoPlay, new Toggle() { public void set(Settings x, boolean v) { x.autoPlay = v; } }));
         autoPlayLine = text("", 13, MUTED, false);
         rules.addView(autoPlayLine);
         // seeing the CarPlay app's media session needs notification access (Android's own screen)
@@ -194,9 +194,9 @@ public final class MainActivity extends Activity {
             }
         });
         rules.addView(autoPlayAccess);
-        toggle(rules, "Mode nuit", "Hiver dès " + s.nightStartWinter + " h, été dès " + s.nightStartSummer
+        bind("night", toggle(rules, "Mode nuit", "Hiver dès " + s.nightStartWinter + " h, été dès " + s.nightStartSummer
                 + " h, jusqu'à " + s.nightEnd + " h : tout à " + s.nightPct + " %",
-            s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } });
+            s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } }));
         LinearLayout n1 = new LinearLayout(this), n2 = new LinearLayout(this);
         blinkMs = number(n1, "Clignot. (ms)", s.blinkMs);
         blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
@@ -243,8 +243,8 @@ public final class MainActivity extends Activity {
         journal.addView(journalSteps);
         journal.addView(text("Avant d'envoyer : partage de connexion du téléphone, et « Journaux Ruban LED » activé dans Home Assistant (vue Tesla).",
             13, MUTED, false));
-        toggle(journal, "Journal détaillé", "Chaque message CAN, chaque commande Bluetooth et réponse du ruban (sinon les lignes principales)",
-            s.journalFull, new Toggle() { public void set(Settings x, boolean v) { x.journalFull = v; } });
+        bind("journalFull", toggle(journal, "Journal détaillé", "Chaque message CAN, chaque commande Bluetooth et réponse du ruban (sinon les lignes principales)",
+            s.journalFull, new Toggle() { public void set(Settings x, boolean v) { x.journalFull = v; } }));
         LinearLayout jc = new LinearLayout(this);
         journalCodes = number(jc, "Codes CAN en plus (ex. 2,3,4 ou 0-127)", 0);
         journalCodes.setText(s.journalCodes);
@@ -253,10 +253,10 @@ public final class MainActivity extends Activity {
 
         // the iPhone page on the CarPlay Wi-Fi (0.25, owner 23 Nov)
         LinearLayout phone = card(right, "Contrôle depuis l'iPhone");
-        toggle(phone, "Page web sur le Wi-Fi CarPlay",
+        bind("remote", toggle(phone, "Page web sur le Wi-Fi CarPlay",
             "Pendant CarPlay, l'iPhone ouvre la même page dans Safari (à mettre en favori ou sur l'écran d'accueil). "
                 + "Seulement sur le Wi-Fi de CarPlay, jamais sur un autre réseau, et avec le code ci-dessous.",
-            s.remote, new Toggle() { public void set(Settings x, boolean v) { x.remote = v; } });
+            s.remote, new Toggle() { public void set(Settings x, boolean v) { x.remote = v; } }));
         remoteLine = text("", 15, TEXT, false);
         remoteLine.setTextIsSelectable(true);
         phone.addView(remoteLine);
@@ -357,6 +357,10 @@ public final class MainActivity extends Activity {
             presenceLine.setText(LedService.presenceText);
             eventsLine.setText(LedService.eventsText.isEmpty() ? "—" : LedService.eventsText);
             autoPlayLine.setText(CarPlayAutoPlay.text);
+            if (seenChanges != RemoteServer.changes) {
+                seenChanges = RemoteServer.changes;
+                syncFromPhone();
+            }
             String addr = RemoteServer.addressText;
             remoteLine.setText("Code : " + Settings.remoteCode(MainActivity.this)
                 + (Settings.load(MainActivity.this).remote ? "\n" + (addr.isEmpty() ? "Démarrage…" : addr) : "\nDésactivé"));
@@ -530,7 +534,53 @@ public final class MainActivity extends Activity {
     }
 
     /** A switch row that saves at once and tells the service. */
-    private void toggle(LinearLayout parent, String title, String sub, boolean value, final Toggle t) {
+    /** Switches by setting name, so a change from the iPhone shows here at once (0.25). */
+    private final java.util.HashMap<String, Switch> switches = new java.util.HashMap<>();
+    /** Set while the screen copies a change from the iPhone: the switches don't save it again. */
+    private boolean syncing;
+    private int seenChanges = RemoteServer.changes;
+
+    private void bind(String key, Switch sw) {
+        switches.put(key, sw);
+    }
+
+    /** The iPhone page changed a colour or a rule: show it here too. */
+    private void syncFromPhone() {
+        Settings s = Settings.load(this);
+        syncing = true;
+        try {
+            if (coloursLocked) {                // not while colours are being edited here
+                steadyPanel.show(s.defaultHue, s.defaultSat, s.dayPct);
+                alertPanel.show(s.blinkHue, s.blinkSat, s.blinkPct);
+            }
+            for (java.util.Map.Entry<String, Switch> e : switches.entrySet()) {
+                Boolean v = value(s, e.getKey());
+                if (v != null && e.getValue().isChecked() != v) e.getValue().setChecked(v);
+            }
+        } finally {
+            syncing = false;
+        }
+    }
+
+    private static Boolean value(Settings s, String key) {
+        switch (key) {
+            case "intro": return s.intro;
+            case "holdAnim": return s.holdAnim;
+            case "apFlash": return s.apFlash;
+            case "reverseWhite": return s.reverseWhite;
+            case "unitQuiet": return s.unitQuiet;
+            case "doorBlink": return s.doorBlink;
+            case "bootAndFrunk": return s.bootAndFrunk;
+            case "hazard": return s.hazard;
+            case "autoPlay": return s.autoPlay;
+            case "night": return s.night;
+            case "journalFull": return s.journalFull;
+            case "remote": return s.remote;
+            default: return null;
+        }
+    }
+
+    private Switch toggle(LinearLayout parent, String title, String sub, boolean value, final Toggle t) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(6), 0, dp(6));
@@ -542,6 +592,7 @@ public final class MainActivity extends Activity {
         sw.setChecked(value);
         sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override public void onCheckedChanged(CompoundButton b, boolean v) {
+                if (syncing) return;
                 Settings s = Settings.load(MainActivity.this);
                 t.set(s, v);
                 s.save(MainActivity.this);
@@ -550,6 +601,7 @@ public final class MainActivity extends Activity {
         });
         row.addView(sw);
         parent.addView(row);
+        return sw;
     }
 
     /** A small labelled number field added to a row (saved with « Enregistrer »). */
@@ -650,6 +702,17 @@ public final class MainActivity extends Activity {
             preview();
             setLocked(true);
             view = row;
+        }
+
+        /** A colour changed elsewhere (the iPhone): wheel, bar and swatch, nothing sent. */
+        void show(int h, int s, int p) {
+            if (h == hue && s == sat && p == pct) return;
+            hue = h;
+            sat = s;
+            pct = p;
+            wheel.setColour(hue, sat);
+            bar.setProgress(pct - 1);
+            preview();
         }
 
         private void preview() {

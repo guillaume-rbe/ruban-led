@@ -153,7 +153,8 @@ l'écran (position, journaux, adresse du ruban, mise à jour) n'y sont pas.
 - **Code à 6 chiffres** dans l'adresse, tiré au hasard et gardé sur l'écran ; « Nouveau code » en tire
   un autre (l'ancienne adresse ne marche plus). 5 mauvais codes depuis une même adresse : 1 min de blocage.
 - La page passe par le service comme l'écran de l'app (mêmes commandes) ; rien ne va à la voiture.
-  L'écran de l'app ne se met à jour qu'à sa réouverture si une couleur a été changée depuis l'iPhone.
+  Un changement fait depuis l'iPhone (couleur, règle) s'affiche aussitôt sur l'écran de l'app (sauf
+  pendant qu'on y modifie soi-même une couleur, roues déverrouillées).
 
 ## Réglages de l'écran
 
