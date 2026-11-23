@@ -21,10 +21,11 @@ ne change pas une couleur) ; règles :
 
 ![Couleurs verrouillées et règles](docs/captures/2-couleurs-verrouillees-regles.png)
 
-Les deux roues grisées tant qu'elles sont verrouillées (couleur permanente, couleur d'alerte rouge) ;
-option « Musique à la connexion CarPlay » et son état :
+Captures d'avant la 0.25 : les roues de couleur sont devenues trois barres (teinte, saturation,
+luminosité), comme sur la page iPhone, grisées tant qu'elles sont verrouillées ; option « Musique à
+la connexion CarPlay » et son état :
 
-![Roues verrouillées et musique à la connexion CarPlay](docs/captures/3-couleurs-musique-carplay.png)
+![Couleurs verrouillées et musique à la connexion CarPlay](docs/captures/3-couleurs-musique-carplay.png)
 
 Derniers événements, adresse du ruban et mise à jour :
 
@@ -52,7 +53,7 @@ Documentation :
   L'allumage remplit le ruban progressivement (~5 s, **3 fois**) dans la couleur permanente
   (ambiante) : les portes de l'arrière vers l'avant, le tableau de bord depuis les deux bouts.
   L'extinction fait l'inverse. Interrupteur « Animations ×3 » : sans lui, allumé / éteint d'un coup.
-- **Clignotement** : chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
+- **Alerte à l'ouverture** (une seule option depuis la 0.25) : chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
   ouverte, et même conducteur à bord) fait clignoter le ruban (couleur d'alerte, rouge par défaut,
   100 % ↔ 1 %, 400 ms, 2 min max).
 - **Coffre d'abord en arrivant** : si en arrivant (déverrouillage, ou voiture encore vue
@@ -103,8 +104,9 @@ Documentation :
   (bouton dans la carte « Règles ») : c'est ce qui permet de voir la session média d'une autre app ;
   aucune notification n'est lue. Validé le 17 nov. ; remplace une automatisation iOS peu fiable.
 - **Mode nuit**, activé par défaut : de 19 h (heure d'hiver) ou 21 h (heure d'été) à 7 h, tout le
-  ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables.
-- **Deux couleurs** réglables dans l'app, chacune avec sa roue et sa jauge de luminosité :
+  ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables sous le
+  bouton « Horaires et luminosité » (dans l'app et sur la page iPhone).
+- **Deux couleurs** réglables dans l'app, chacune avec trois barres (teinte, saturation, luminosité) :
   couleur permanente, et couleur d'alerte (rouge 100 % par défaut, réservée aux portes, coffre, frunk et warnings).
 - Écran sombre en cartes : état, présence, couleurs, derniers événements (heure de chaque porte,
   connexion du ruban… pour voir d'où vient un retard), actions, règles, ruban et mise à jour.
@@ -154,7 +156,7 @@ l'écran (position, journaux, adresse du ruban, mise à jour) n'y sont pas.
   un autre (l'ancienne adresse ne marche plus). 5 mauvais codes depuis une même adresse : 1 min de blocage.
 - La page passe par le service comme l'écran de l'app (mêmes commandes) ; rien ne va à la voiture.
   Un changement fait depuis l'iPhone (couleur, règle) s'affiche aussitôt sur l'écran de l'app (sauf
-  pendant qu'on y modifie soi-même une couleur, roues déverrouillées).
+  pendant qu'on y modifie soi-même une couleur, barres déverrouillées).
 
 ## Réglages de l'écran
 

@@ -13,6 +13,7 @@ final class Settings {
 
     String address;
     boolean doorBlink;
+    /** Kept for old saves only: since 0.25 doorBlink covers doors, boot and frunk (one option). */
     boolean bootAndFrunk;
     boolean hazard;
     /** Music on when CarPlay connects (CarPlayAutoPlay; owner, 17 Nov). */

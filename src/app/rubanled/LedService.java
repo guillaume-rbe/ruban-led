@@ -951,7 +951,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     }
 
     @Override public void onDoors(int v) {
-        int mask = settings.bootAndFrunk ? 0xfc : 0xf0;
+        int mask = 0xfc;                      // the four doors, boot and frunk (one option since 0.25)
         int opened = v & ~doorVal & mask;     // each newly opened lid counts, not only the first
         doorVal = v;
         boolean open = (v & mask) != 0;
@@ -1416,7 +1416,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         Settings s = settings;
         return "couleur T" + s.defaultHue + " S" + s.defaultSat + " " + s.dayPct + "%, alerte T" + s.blinkHue + " " + s.blinkPct + "%"
             + ", nuit " + (s.night ? s.nightStartWinter + "h/" + s.nightStartSummer + "h-" + s.nightEnd + "h " + s.nightPct + "%" : "non")
-            + ", animations " + (s.intro ? "×" + s.animRepeat : "non") + ", portes " + s.doorBlink + ", coffre " + s.bootAndFrunk
+            + ", animations " + (s.intro ? "×" + s.animRepeat : "non") + ", ouvertures " + s.doorBlink
             + ", warnings " + s.hazard + ", arrêt " + (s.holdAnim ? "1/" + s.holdChance : "non") + ", autosteer " + s.apFlash
             + ", marche arrière " + s.reverseWhite + ", écran position appareil " + s.unitQuiet + ", iPhone " + s.remote + ", commande courte " + s.shortColour
             + ", musique CarPlay " + s.autoPlay + ", journal " + (s.journalFull ? "détaillé" : "normal")

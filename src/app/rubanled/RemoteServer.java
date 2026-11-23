@@ -54,7 +54,7 @@ final class RemoteServer {
     private static final long LOCK_MS = 60000;
     /** Rule switches the page may change (the same as the app's Règles card, dash settings aside). */
     static final String[] RULES = {
-        "intro", "holdAnim", "apFlash", "reverseWhite", "doorBlink", "bootAndFrunk", "hazard", "autoPlay", "night",
+        "intro", "holdAnim", "apFlash", "reverseWhite", "doorBlink", "hazard", "autoPlay", "night",
     };
 
     private final Context ctx;
@@ -219,6 +219,15 @@ final class RemoteServer {
                     .putExtra("pct", clamp(num(p.get("p")), 1, 100));
                 host.handle(i);
                 reply(out, 200, "application/json", "{\"ok\":true}");
+            } else if ("night".equals(what) && "POST".equals(method)) {
+                Settings ns = Settings.load(ctx);
+                ns.nightStartWinter = clamp(num(p.get("w")), 0, 23);
+                ns.nightStartSummer = clamp(num(p.get("s")), 0, 23);
+                ns.nightEnd = clamp(num(p.get("e")), 0, 23);
+                ns.nightPct = clamp(num(p.get("p")), 1, 100);
+                ns.save(ctx);
+                host.handle(new Intent(LedService.ACTION_RELOAD));
+                reply(out, 200, "application/json", "{\"ok\":true}");
             } else if ("rule".equals(what) && "POST".equals(method)) {
                 if (!setRule(p.get("k"), "1".equals(p.get("v")))) { reply(out, 400, "text/plain", "Règle inconnue"); return; }
                 host.handle(new Intent(LedService.ACTION_RELOAD));
@@ -306,8 +315,7 @@ final class RemoteServer {
             case "holdAnim": s.holdAnim = v; break;
             case "apFlash": s.apFlash = v; break;
             case "reverseWhite": s.reverseWhite = v; break;
-            case "doorBlink": s.doorBlink = v; break;
-            case "bootAndFrunk": s.bootAndFrunk = v; break;
+            case "doorBlink": s.doorBlink = v; s.bootAndFrunk = v; break;
             case "hazard": s.hazard = v; break;
             case "autoPlay": s.autoPlay = v; break;
             case "night": s.night = v; break;
@@ -329,14 +337,22 @@ final class RemoteServer {
         b.append("\"steady\":[").append(s.defaultHue).append(',').append(s.defaultSat).append(',').append(s.dayPct).append("],");
         b.append("\"anim\":[").append(s.blinkHue).append(',').append(s.blinkSat).append(',').append(s.blinkPct).append("],");
         b.append("\"rules\":{");
-        boolean[] v = {s.intro, s.holdAnim, s.apFlash, s.reverseWhite, s.doorBlink, s.bootAndFrunk, s.hazard, s.autoPlay, s.night};
+        boolean[] v = {s.intro, s.holdAnim, s.apFlash, s.reverseWhite, s.doorBlink, s.hazard, s.autoPlay, s.night};
         for (int i = 0; i < RULES.length; i++) {
             if (i > 0) b.append(',');
             b.append('"').append(RULES[i]).append("\":").append(v[i]);
         }
         b.append("},");
-        str(b, "night", s.nightStartWinter + " h (hiver) / " + s.nightStartSummer + " h (été) → " + s.nightEnd + " h, " + s.nightPct + " %");
+        str(b, "night", nightText(s)).append(',');
+        b.append("\"nightVals\":[").append(s.nightStartWinter).append(',').append(s.nightStartSummer).append(',')
+            .append(s.nightEnd).append(',').append(s.nightPct).append(']');
         return b.append('}').toString();
+    }
+
+    /** "Hiver dès 19 h, été dès 21 h, jusqu'à 7 h : tout à 20 %", as the app shows it. */
+    static String nightText(Settings s) {
+        return "Hiver dès " + s.nightStartWinter + " h, été dès " + s.nightStartSummer + " h, jusqu'à "
+            + s.nightEnd + " h : tout à " + s.nightPct + " %";
     }
 
     private static StringBuilder str(StringBuilder b, String key, String value) {

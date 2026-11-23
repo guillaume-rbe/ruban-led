@@ -5,6 +5,9 @@ Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la re
 ## 0.25
 
 - **Contrôle depuis l'iPhone pendant CarPlay** (option, désactivée par défaut, carte « Contrôle depuis l'iPhone ») : Ruban LED sert une page web sur le Wi-Fi de CarPlay, avec la même chose que son écran (état, allumer / éteindre / couleur permanente, boutons de test, couleurs permanente et d'alerte, règles, derniers événements). L'adresse (`http://…:8080/<code>`) s'affiche dans la carte et dans « Derniers événements » quand l'iPhone est connecté ; à mettre en favori ou sur l'écran d'accueil de l'iPhone depuis Safari. Elle ne répond que sur le Wi-Fi de CarPlay, jamais sur un autre réseau, et seulement avec le code à 6 chiffres de l'adresse (« Nouveau code » pour en changer). Ce qui est changé depuis l'iPhone s'affiche aussitôt sur l'écran de l'app.
+- **Couleurs en trois barres** dans l'app, comme sur la page iPhone : teinte, saturation et luminosité, chacune avec son dégradé, au lieu des roues (toujours verrouillées par défaut).
+- **« Alerte à l'ouverture »** : une seule option pour les portières, le coffre et le frunk, au lieu de « Clignoter quand une porte s'ouvre » et « … aussi coffre et frunk ».
+- **Mode nuit** : début (hiver, été), fin et luminosité réglables sous un bouton « Horaires et luminosité », dans l'app et sur la page iPhone, avec leur propre bouton « Enregistrer les horaires ».
 - Texte de la règle « Blanc en marche arrière » : le blanc respire.
 
 ## 0.24

@@ -44,7 +44,7 @@ public final class MainActivity extends Activity {
     private static final int WARN = 0xFFFFB300;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private TextView remoteLine;
+    private TextView remoteLine, nightSummary;
     private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine, autoPlayLine;
     private Button autoPlayAccess;
     private View linkDot;
@@ -173,10 +173,10 @@ public final class MainActivity extends Activity {
         bind("unitQuiet", toggle(rules, "Écran : position activée (plus d'alerte Google)",
             "Position en mode « appareil seul » (GPS, sans scans Wi-Fi ni réseau Google ; pas de module branché, donc rien ne tourne) : la fenêtre « accès à la position désactivé » de Google ne s'affiche plus au démarrage. Désactiver remet le mode d'avant.",
             s.unitQuiet, new Toggle() { public void set(Settings x, boolean v) { x.unitQuiet = v; } }));
-        bind("doorBlink", toggle(rules, "Clignoter quand une porte s'ouvre", null,
-            s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } }));
-        bind("bootAndFrunk", toggle(rules, "… aussi coffre et frunk", null,
-            s.bootAndFrunk, new Toggle() { public void set(Settings x, boolean v) { x.bootAndFrunk = v; } }));
+        // one option for every opening (owner, 23 Nov: doors and boot/frunk were two switches)
+        bind("doorBlink", toggle(rules, "Alerte à l'ouverture",
+            "Le ruban clignote dans la couleur d'alerte quand une portière, le coffre ou le frunk s'ouvre",
+            s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; x.bootAndFrunk = v; } }));
         bind("hazard", toggle(rules, "Clignoter avec les warnings", null,
             s.hazard, new Toggle() { public void set(Settings x, boolean v) { x.hazard = v; } }));
         bind("autoPlay", toggle(rules, "Musique à la connexion CarPlay",
@@ -194,22 +194,47 @@ public final class MainActivity extends Activity {
             }
         });
         rules.addView(autoPlayAccess);
-        bind("night", toggle(rules, "Mode nuit", "Hiver dès " + s.nightStartWinter + " h, été dès " + s.nightStartSummer
-                + " h, jusqu'à " + s.nightEnd + " h : tout à " + s.nightPct + " %",
+        bind("night", toggle(rules, "Mode nuit", null,
             s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } }));
+        nightSummary = text(RemoteServer.nightText(s), 13, MUTED, false);
+        rules.addView(nightSummary);
+        // the hours and brightness behind a button (owner, 23 Nov: too much room otherwise)
+        final Button nightBtn = pill("Horaires et luminosité ▸", false);
+        final LinearLayout nightBox = column();
+        nightBox.setVisibility(View.GONE);
+        nightBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                boolean show = nightBox.getVisibility() != View.VISIBLE;
+                nightBox.setVisibility(show ? View.VISIBLE : View.GONE);
+                nightBtn.setText(show ? "Horaires et luminosité ▾" : "Horaires et luminosité ▸");
+            }
+        });
+        LinearLayout.LayoutParams nb = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        nb.topMargin = dp(6);
+        rules.addView(nightBtn, nb);
         LinearLayout n1 = new LinearLayout(this), n2 = new LinearLayout(this);
         blinkMs = number(n1, "Clignot. (ms)", s.blinkMs);
         blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
         repeat = number(n1, "Animations ×", s.animRepeat);
         holdChance = number(n1, "Arrêt : 1 sur", s.holdChance);
-        nightWinter = number(n2, "Nuit hiver (h)", s.nightStartWinter);
-        nightSummer = number(n2, "Nuit été (h)", s.nightStartSummer);
-        nightEnd = number(n2, "jusqu'à (h)", s.nightEnd);
-        nightPct = number(n2, "Lum. nuit (%)", s.nightPct);
+        nightWinter = number(n2, "Début hiver (h)", s.nightStartWinter);
+        nightSummer = number(n2, "Début été (h)", s.nightStartSummer);
+        nightEnd = number(n2, "Fin (h)", s.nightEnd);
+        nightPct = number(n2, "Luminosité (%)", s.nightPct);
         // fields under a two-line label sat lower: no baseline alignment in these rows (owner, 23 Nov)
         for (LinearLayout r : new LinearLayout[] { n1, n2, t1, t2 }) r.setBaselineAligned(false);
+        nightBox.addView(n2);
+        Button nightSave = pill("Enregistrer les horaires", true);
+        nightSave.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { saveNight(); }
+        });
+        LinearLayout.LayoutParams ns = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        ns.topMargin = dp(8);
+        nightBox.addView(nightSave, ns);
+        rules.addView(nightBox);
         rules.addView(n1);
-        rules.addView(n2);
 
         // ---- journal (0.20): sent on demand, the steps and a progress bar shown here
         LinearLayout journal = card(left, "Journaux (débogage)");  // left: the right column was much longer (owner, 23 Nov)
@@ -407,14 +432,27 @@ public final class MainActivity extends Activity {
             s.blinkMaxSec = clamp(num(blinkMax), 5, 3600);
             s.animRepeat = clamp(num(repeat), 1, 10);
             s.holdChance = clamp(num(holdChance), 1, 20);
-            s.nightStartWinter = clamp(num(nightWinter), 0, 23);
-            s.nightStartSummer = clamp(num(nightSummer), 0, 23);
-            s.nightEnd = clamp(num(nightEnd), 0, 23);
-            s.nightPct = clamp(num(nightPct), 1, 100);
             s.journalCodes = journalCodes.getText().toString().replaceAll("[^0-9,;\\- ]", "").trim();
             s.save(this);
             LedService.send(this, LedService.ACTION_RELOAD);
             Toast.makeText(this, "Enregistré", Toast.LENGTH_SHORT).show();
+        } catch (NumberFormatException e) {
+            Toast.makeText(this, "Un nombre est invalide", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** The night hours and brightness (their own button since 0.25). */
+    private void saveNight() {
+        try {
+            Settings s = Settings.load(this);
+            s.nightStartWinter = clamp(num(nightWinter), 0, 23);
+            s.nightStartSummer = clamp(num(nightSummer), 0, 23);
+            s.nightEnd = clamp(num(nightEnd), 0, 23);
+            s.nightPct = clamp(num(nightPct), 1, 100);
+            s.save(this);
+            nightSummary.setText(RemoteServer.nightText(s));
+            LedService.send(this, LedService.ACTION_RELOAD);
+            Toast.makeText(this, "Horaires enregistrés", Toast.LENGTH_SHORT).show();
         } catch (NumberFormatException e) {
             Toast.makeText(this, "Un nombre est invalide", Toast.LENGTH_SHORT).show();
         }
@@ -553,6 +591,13 @@ public final class MainActivity extends Activity {
                 steadyPanel.show(s.defaultHue, s.defaultSat, s.dayPct);
                 alertPanel.show(s.blinkHue, s.blinkSat, s.blinkPct);
             }
+            nightSummary.setText(RemoteServer.nightText(s));
+            if (!nightWinter.hasFocus() && !nightSummer.hasFocus() && !nightEnd.hasFocus() && !nightPct.hasFocus()) {
+                nightWinter.setText("" + s.nightStartWinter);
+                nightSummer.setText("" + s.nightStartSummer);
+                nightEnd.setText("" + s.nightEnd);
+                nightPct.setText("" + s.nightPct);
+            }
             for (java.util.Map.Entry<String, Switch> e : switches.entrySet()) {
                 Boolean v = value(s, e.getKey());
                 if (v != null && e.getValue().isChecked() != v) e.getValue().setChecked(v);
@@ -570,7 +615,6 @@ public final class MainActivity extends Activity {
             case "reverseWhite": return s.reverseWhite;
             case "unitQuiet": return s.unitQuiet;
             case "doorBlink": return s.doorBlink;
-            case "bootAndFrunk": return s.bootAndFrunk;
             case "hazard": return s.hazard;
             case "autoPlay": return s.autoPlay;
             case "night": return s.night;
@@ -639,20 +683,24 @@ public final class MainActivity extends Activity {
     }
 
     /** One colour setting: wheel on the left; title, preview and brightness gauge on the right. */
+    /**
+     * One colour as three bars, like the iPhone page (owner, 23 Nov): hue, saturation, brightness,
+     * each drawn with its own gradient, and a swatch. Locked like before (a scroll must not change it).
+     */
     private final class ColourPanel {
         final View view;
         private final String target;
         private final View swatch;
         private final TextView pctLabel;
-        private final ColourWheel wheel;
-        private final SeekBar bar;
+        private final SeekBar hueBar, satBar, valBar;
         private int hue, sat, pct;
         private long lastSentMs;
 
         void setLocked(boolean l) {
-            wheel.setLocked(l);
-            bar.setEnabled(!l);
-            bar.setAlpha(l ? 0.45f : 1f);
+            for (SeekBar b : new SeekBar[] {hueBar, satBar, valBar}) {
+                b.setEnabled(!l);
+                b.setAlpha(l ? 0.45f : 1f);
+            }
         }
 
         ColourPanel(String target, String title, int hue0, int sat0, int pct0) {
@@ -660,67 +708,92 @@ public final class MainActivity extends Activity {
             hue = hue0;
             sat = sat0;
             pct = pct0;
-            LinearLayout row = new LinearLayout(MainActivity.this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            wheel = new ColourWheel(MainActivity.this);
-            wheel.setColour(hue, sat);
-            row.addView(wheel, new LinearLayout.LayoutParams(dp(170), dp(170)));
-
-            LinearLayout right = column();
-            right.setPadding(dp(18), 0, 0, 0);
-            right.addView(text(title, 17, TEXT, true));
+            LinearLayout box = column();
+            LinearLayout head = new LinearLayout(MainActivity.this);
+            head.setGravity(Gravity.CENTER_VERTICAL);
             swatch = new View(MainActivity.this);
-            LinearLayout.LayoutParams sw = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36));
-            sw.topMargin = dp(8);
-            right.addView(swatch, sw);
-            pctLabel = text("", 15, MUTED, false);
-            pctLabel.setPadding(0, dp(10), 0, 0);
-            right.addView(pctLabel);
-            bar = new SeekBar(MainActivity.this);
-            bar.setMax(99);
-            bar.setProgress(pct - 1);
-            bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            head.addView(swatch, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            LinearLayout names = column();
+            names.setPadding(dp(12), 0, 0, 0);
+            names.addView(text(title, 17, TEXT, true));
+            pctLabel = text("", 14, MUTED, false);
+            names.addView(pctLabel);
+            head.addView(names, weight(1, 0));
+            box.addView(head);
+            hueBar = bar(box, "Teinte", 359, hue);
+            satBar = bar(box, "Saturation", 100, sat);
+            valBar = bar(box, "Luminosité", 99, pct - 1);
+            SeekBar.OnSeekBarChangeListener l = new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar b, int p, boolean user) {
-                    pct = p + 1;
+                    hue = hueBar.getProgress();
+                    sat = satBar.getProgress();
+                    pct = valBar.getProgress() + 1;
                     preview();
                     if (user) send(false);
                 }
                 @Override public void onStartTrackingTouch(SeekBar b) {}
                 @Override public void onStopTrackingTouch(SeekBar b) { send(true); }
-            });
-            right.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)));
-            row.addView(right, weight(1, 0));
-
-            wheel.setListener(new ColourWheel.Listener() {
-                @Override public void onColour(int h, int s, boolean done) {
-                    hue = h;
-                    sat = s;
-                    preview();
-                    send(done);
-                }
-            });
+            };
+            hueBar.setOnSeekBarChangeListener(l);
+            satBar.setOnSeekBarChangeListener(l);
+            valBar.setOnSeekBarChangeListener(l);
+            hueBar.setProgressDrawable(gradient(new int[] {0xFFFF0000, 0xFFFFFF00, 0xFF00FF00, 0xFF00FFFF,
+                0xFF0000FF, 0xFFFF00FF, 0xFFFF0000}));
             preview();
             setLocked(true);
-            view = row;
+            view = box;
         }
 
-        /** A colour changed elsewhere (the iPhone): wheel, bar and swatch, nothing sent. */
+        /** A labelled bar 0..max at value, with a white round thumb. */
+        private SeekBar bar(LinearLayout parent, String label, int max, int value) {
+            TextView t = text(label, 13, MUTED, false);
+            t.setPadding(0, dp(10), 0, dp(4));
+            parent.addView(t);
+            SeekBar b = new SeekBar(MainActivity.this);
+            b.setMax(max);
+            b.setProgress(value);
+            b.setSplitTrack(false);
+            b.setPadding(dp(16), 0, dp(16), 0);
+            GradientDrawable thumb = new GradientDrawable();
+            thumb.setShape(GradientDrawable.OVAL);
+            thumb.setColor(Color.WHITE);
+            thumb.setStroke(dp(3), 0x88000000);
+            thumb.setSize(dp(30), dp(30));
+            b.setThumb(thumb);
+            b.setThumbOffset(dp(15));
+            parent.addView(b, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(34)));
+            return b;
+        }
+
+        private GradientDrawable gradient(int[] colours) {
+            GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colours);
+            g.setCornerRadius(dp(15));
+            g.setStroke(dp(1), CARD_LINE);
+            return g;
+        }
+
+        /** A colour changed elsewhere (the iPhone): bars and swatch, nothing sent. */
         void show(int h, int s, int p) {
             if (h == hue && s == sat && p == pct) return;
             hue = h;
             sat = s;
             pct = p;
-            wheel.setColour(hue, sat);
-            bar.setProgress(pct - 1);
+            hueBar.setProgress(h);
+            satBar.setProgress(s);
+            valBar.setProgress(p - 1);
             preview();
         }
 
         private void preview() {
             GradientDrawable g = new GradientDrawable();
             g.setCornerRadius(dp(10));
+            g.setStroke(dp(1), CARD_LINE);
             g.setColor(Color.HSVToColor(new float[] {hue, sat / 100f, 0.25f + 0.75f * pct / 100f}));
             swatch.setBackground(g);
-            pctLabel.setText("Luminosité  " + pct + " %");
+            pctLabel.setText("Luminosité " + pct + " %");
+            // the saturation bar from white to the pure hue, the brightness one from black to the colour
+            satBar.setProgressDrawable(gradient(new int[] {Color.WHITE, Color.HSVToColor(new float[] {hue, 1f, 1f})}));
+            valBar.setProgressDrawable(gradient(new int[] {Color.BLACK, Color.HSVToColor(new float[] {hue, sat / 100f, 1f})}));
         }
 
         private void send(boolean done) {
