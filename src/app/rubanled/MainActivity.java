@@ -162,8 +162,8 @@ public final class MainActivity extends Activity {
         LinearLayout rules = card(right, "Règles");
         toggle(rules, "Animations ×3", "Allumage au déverrouillage, extinction au verrouillage (sinon allumé / éteint d'un coup)",
             s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } });
-        toggle(rules, "Animation à l'arrêt (Auto Hold)",
-            "Après 1 s d'Auto Hold, une fois sur N au hasard : une animation au hasard sur le tableau de bord, jusqu'au départ",
+        toggle(rules, "Animation à l'arrêt",
+            "Arrêté en D (0 km/h) après avoir roulé, depuis 1 s : une fois sur N au hasard, une animation au hasard sur le tableau de bord, jusqu'au départ (le boîtier CAN ne transmet pas l'Auto Hold)",
             s.holdAnim, new Toggle() { public void set(Settings x, boolean v) { x.holdAnim = v; } });
         toggle(rules, "Bleu à l'activation de l'Autosteer", "1 s dans le bleu de l'Autopilot de Binnacle, à la luminosité du moment",
             s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } });

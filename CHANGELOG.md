@@ -2,6 +2,11 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.23
+
+- **Animation à l'arrêt sans l'Auto Hold** : le boîtier CAN du kit ne transmet pas l'Auto Hold sur cette Model 3 (vérifié le 23 nov. : deux Auto Hold, aucun message). L'arrêt est donc reconnu autrement : voiture à **0 km/h en D après avoir roulé** (même au pas). L'animation part après 1 s d'arrêt, toujours une fois sur 4 au hasard, et s'arrête au départ ou en passant en P, R ou N. Si un jour le boîtier transmet l'Auto Hold, il compte aussi.
+- Le journal note chaque « arrêt en D après avoir roulé » et chaque « repart ».
+
 ## 0.22
 
 - **Plus de fermeture forcée au redémarrage du service** : le service répond à Android à chaque demande de démarrage (ouverture de l'app, chien de garde, mise à jour), et plus seulement la première fois. Le 23 nov., un redémarrage tombé pendant une de ces demandes avait fait fermer l'app par Android (elle était repartie seule 20 s après).

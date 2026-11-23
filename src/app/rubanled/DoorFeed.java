@@ -80,9 +80,29 @@ final class DoorFeed {
     private boolean left, right, charging, park, hold, autosteer;
     private String limitSw;
     private int gear = -1;
+    /**
+     * The kit's CAN box never sets "autohandlight" on this Model 3 (owner's tests, 23 Nov: two Auto
+     * Holds, no code 9 at all), so a stop stands in for it: stopped (carspeed 0) in Drive after
+     * having driven at STOP_ARM_KMH or more.
+     */
+    private boolean moved, stopped;
+    private int speed = -1;
+    static final int STOP_ARM_KMH = 1;   // any move, like the Auto Hold (tests in the garage: 1-2 km/h)
     private int percent = -1, jhmail = -1, batterylevel = -1;
     private final Battery battery = new Battery();
 
+
+    /** A stop in Drive after driving counts as an Auto Hold (see moved / stopped). */
+    private void stopCheck() {
+        if (speed >= STOP_ARM_KMH) moved = true;
+        if (gear != 3) moved = false;                    // P, R or N: a new drive must start
+        boolean now = moved && gear == 3 && speed == 0;
+        if (now == stopped) return;
+        boolean was = hold || stopped;
+        stopped = now;
+        journal.log("CAN", now ? "arrêt en D après avoir roulé (vaut Auto Hold)" : "repart (fin de l'arrêt)");
+        if ((hold || stopped) != was) listener.onAutoHold(hold || stopped);
+    }
 
     /** looper: where messages and callbacks run (the service's high-priority thread). */
     DoorFeed(Context ctx, Listener listener, Looper looper) {
@@ -113,9 +133,9 @@ final class DoorFeed {
                             if (autosteer != was) DoorFeed.this.listener.onAutosteer(autosteer);
                         }
                         if (b.containsKey("autohandlight")) {
-                            boolean was = hold;
+                            boolean was = hold || stopped;
                             hold = lit(b, "autohandlight", hold);
-                            if (hold != was) DoorFeed.this.listener.onAutoHold(hold);
+                            if ((hold || stopped) != was) DoorFeed.this.listener.onAutoHold(hold || stopped);
                         }
                         if (b.containsKey("chargelight")) {
                             charging = lit(b, "chargelight", charging);
@@ -124,6 +144,10 @@ final class DoorFeed {
                         return;
                     }
                     if (msg.what == CODE_SPEED) {
+                        if (b.containsKey("carspeed")) {
+                            speed = num(b, "carspeed", speed);
+                            stopCheck();
+                        }
                         if (!b.containsKey("speedlimitsw")) return;
                         String v = String.valueOf(b.get("speedlimitsw"));
                         if (!v.equals(limitSw)) {
@@ -135,7 +159,7 @@ final class DoorFeed {
                     if (msg.what == CODE_BATTERY) {
                         if (b.containsKey("gear")) {
                             int g = num(b, "gear", gear);
-                            if (g != gear) { gear = g; DoorFeed.this.listener.onGear(g); }
+                            if (g != gear) { gear = g; DoorFeed.this.listener.onGear(g); stopCheck(); }
                         }
                         jhmail = num(b, "jhmail", jhmail);
                         batterylevel = num(b, "batterylevel", batterylevel);
