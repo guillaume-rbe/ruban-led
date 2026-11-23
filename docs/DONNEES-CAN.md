@@ -1,7 +1,7 @@
 # Données de la voiture utilisées (relevés du 16 et 17 novembre 2026)
 
 Tout est lu **en lecture seule** auprès de l'app CAN d'origine de l'écran (`com.xbs.canapp`) :
-abonnement (`regPropIdList`) aux codes 15, 9 et 11, désabonnement (`unregPropIdList`), rien d'autre.
+abonnement (`regPropIdList`) aux codes 15, 9, 10 et 11, désabonnement (`unregPropIdList`), rien d'autre.
 Rien n'est envoyé à la voiture ni au MCU. Les relevés ont été faits avec l'enregistreur (« logger »)
 de [Binnacle](https://github.com/lotech/binnacle), qui écrit tous les codes 0 à 127.
 
@@ -14,8 +14,7 @@ de [Binnacle](https://github.com/lotech/binnacle), qui écrit tous les codes 0 �
 | 9 | `postlight` | `true` / `false` | feux d'accueil : signe le déverrouillage |
 | 9 | `chargelight` | `true` pendant la charge | jauge de batterie |
 | 9 | `autodrivermode` | `true` pendant l'Autosteer (vérifié par Binnacle le 28 oct.) | 1 s de bleu à l'activation |
-| 10 | `speedlimitsw` | sens inconnu (limiteur ? affichage du panneau ?) | seulement noté dans « Derniers événements » |
-| 9 | `autohandlight` | `true` pendant l'Auto Hold (arrêt maintenu en D/R, vérifié par Binnacle le 28 oct.) | animation à l'arrêt |
+| 10 | `carspeed` | km/h | arrêt en D après avoir roulé = Auto Hold (animation à l'arrêt) |
 | 11 | `gear` | 0 = P, 1 = R, 3 = D (vérifié par Binnacle) | blanc en marche arrière |
 | 11 | `jhmail`, `batterylevel` | voir `Battery.java` (table de Binnacle) | pourcentage de batterie |
 
@@ -43,9 +42,13 @@ Il faut que la confirmation lumineuse du verrouillage soit activée dans les ré
 
 ## Ce qui n'est pas dans le flux
 
-- **Rétroviseurs** (repliés / dépliés) : enregistrement de tous les codes 0 à 127 pendant plusieurs
-  replis et dépliages, aucun champ n'a changé. L'app CAN ne publie pas cet état.
 - **État verrouillé en tant que tel** : pas de champ dédié, seulement les flashs de confirmation.
+- **Auto Hold** : sur cette Model 3, `autohandlight` (code 9) est en fait le **frein de parking** :
+  `true` en P (au démarrage, après s'être garé), `false` dès le passage en D, et `false` à chaque
+  Auto Hold au feu (journal du 23 nov.). L'écran du kit l'affiche pourtant en « H ». Pas lu par l'app.
+- **Limiteur de vitesse et régulateur seul (TACC)** : aucun champ des codes 9, 10, 11, 15 ne bouge
+  (essai du 23 nov., 16:21). `speedlimitsw` (code 10) est l'affichage du panneau de vitesse
+  (`speedlimit` = 30, 50, 70…) : `true` dès qu'on roule, `false` en P.
 - Feux stop, autonomie réelle (sur cette voiture) : voir la carte des champs de Binnacle.
 
 ## Câblage du ruban

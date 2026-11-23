@@ -32,7 +32,7 @@ Derniers événements, adresse du ruban et mise à jour :
 
 Documentation :
 - [docs/DONNEES-CAN.md](docs/DONNEES-CAN.md) : les champs lus, le relevé du verrouillage, ce qui
-  n'est pas dans le flux (rétroviseurs) ;
+  n'est pas dans le flux (Auto Hold, limiteur) ;
 - [PROTOCOLE.md](PROTOCOLE.md) : le protocole Bluetooth du ruban Zengge.
 
 ## Ce qu'elle fait
@@ -60,14 +60,15 @@ Documentation :
   d'habitude (l'animation d'allumage s'arrête si elle tournait) et l'animation d'allumage est
   gardée pour la première portière ouverte (dans les 15 min), à la place du clignotement.
 - **Marche arrière** (option, activée par défaut) : tant que la marche arrière est passée (code 11
-  `gear` = 1), un blanc doux un peu plus fort que la couleur permanente (+30 points, ×1,5 au moins ;
-  50 % la nuit), puis la couleur habituelle. Une porte qui s'ouvre clignote quand même, et le blanc
+  `gear` = 1), un blanc qui respire (de 15 % à 100 % du blanc et retour, toutes les 2 s), ce blanc
+  étant un peu plus fort que la couleur permanente (+30 points, ×1,5 au moins ; 50 % la nuit), puis
+  la couleur habituelle. Une porte qui s'ouvre clignote quand même, et le blanc
   revient après si la marche arrière est toujours passée.
 - **Autosteer** (option, activée par défaut) : à son activation (code 9 `autodrivermode`), 1 s dans
   le bleu de l'Autopilot de Binnacle (teinte 212°, saturation 88 %) à la luminosité du moment, puis
-  la couleur permanente. Le régulateur seul (TACC) n'a pas de champ dans le flux. Le limiteur
-  n'en a pas de connu : `speedlimitsw` (code 10) est noté dans « Derniers événements » à chaque
-  changement, pour vérifier s'il le suit.
+  la couleur permanente. Le régulateur seul (TACC) et le limiteur n'ont pas de champ dans le flux
+  (essai du 23 nov. : rien ne bouge ; `speedlimitsw` du code 10 est l'affichage du panneau de
+  vitesse, vrai dès qu'on roule, faux en P).
 - **Après chaque animation** : toujours la couleur permanente (la jauge pendant la recharge), ou
   ruban éteint si la voiture est verrouillée.
 - **Warnings** : à partir de **3 flashs** de suite des deux clignotants (1 ou 2, c'est le
@@ -108,13 +109,6 @@ Documentation :
 - Écran sombre en cartes : état, présence, couleurs, derniers événements (heure de chaque porte,
   connexion du ruban… pour voir d'où vient un retard), actions, règles, ruban et mise à jour.
 
-## Rétroviseurs
-
-Abandonnés en 0.7 : l'app CAN d'origine ne publie pas leur état (enregistrement de tous les codes
-0–127 avec le logger de Binnacle le 17 nov., rétros repliés puis dépliés plusieurs fois : aucun champ
-n'a changé). Le verrouillage, lu sur les clignotants, les remplace. Détails dans
-[docs/DONNEES-CAN.md](docs/DONNEES-CAN.md).
-
 ## Journaux (0.20)
 
 Pour déboguer sans recompiler l'app : un journal large, gardé sur l'écran **7 jours et 150 Mo au
@@ -143,21 +137,22 @@ logcat. L'adresse du serveur et le certificat client sont dans le stockage priv�
 tout cela n'est dans ce dépôt. Côté serveur, il suffit d'accepter un `PUT` sur
 `/journaux/ruban-AAAAMMJJ-HHMMSS.log.gz` avec ce certificat client.
 
-## Réglages de l'écran (0.19)
+## Réglages de l'écran
 
-Option « Écran : position sans GPS (plus d'alerte Google) » (activée par défaut) : à chaque
+Option « Écran : position activée (plus d'alerte Google) » (activée par défaut) : à chaque
 démarrage, l'app lance par l'ADB réseau de l'écran (127.0.0.1:5555, sans authentification sur cet
 écran, comme Binnacle) une liste **fixe** de commandes, jamais une commande venue de l'extérieur :
 
 | Quoi | Commande | Annuler |
 |---|---|---|
-| Position en mode réseau seul, GPS retiré | `settings put secure location_mode 2` puis `location_providers_allowed -gps` | le mode d'avant, gardé par l'app (`settings put secure location_mode <0-3>`) |
+| Position en mode appareil seul (GPS) | `settings put secure location_mode 1` puis `location_providers_allowed +gps` | le mode d'avant, gardé par l'app (`settings put secure location_mode <0-3>`) |
 
 Pourquoi : la fenêtre de Google « L'accès à la position de l'appareil étant désactivé… »
-(Localiser mon appareil, *Fermer / Activer la localisation*) s'affichait à chaque démarrage parce que
-la Position était coupée. Aucun module GPS n'est branché, et la précision de la localisation Google
-est coupée (pas de scans Wi-Fi), donc ce mode ne localise pas vraiment l'écran ; il évite juste la
-fenêtre. L'état avant / après et l'écran au premier plan ~45 s après le démarrage sont notés dans
+(Localiser mon appareil, *Fermer / Activer la localisation*) s'affiche au démarrage quand aucun
+fournisseur de position n'est actif. L'écran n'a pas de position par le réseau : le mode « réseau
+seul » des versions 0.19 à 0.23 revenait à tout couper (la fenêtre restait). Le mode appareil seul
+garde le GPS comme seul fournisseur, sans scans Wi-Fi ni réseau Google (la précision de la
+localisation Google reste coupée). L'état avant / après et l'écran au premier plan ~45 s après le démarrage sont notés dans
 « Derniers événements » (pour nommer la fenêtre si elle revenait).
 
 ## Priorité et réactivité
@@ -233,11 +228,6 @@ Si Android refuse la connexion de l'app (« socket failed: EPERM », vu sur l'A0
 permission Internet est arrivée par une mise à jour : Android la donne mais le processus ne l'a
 pas), l'app passe par le gestionnaire de téléchargements d'Android, qui télécharge à sa place.
 Redémarrer l'écran une fois corrige cet accès refusé.
-
-Jusqu'à la 0.10, l'app était développée sur la branche `ruban-led` du fork
-[guillaume-rbe/binnacle](https://github.com/guillaume-rbe/binnacle/tree/ruban-led) et cherchait ses
-mises à jour là-bas. La 0.11 y est aussi publiée pour faire le passage ; les versions suivantes ne
-sont publiées qu'ici.
 
 L'avertissement de Google Play Protect (« application non sûre ») à chaque mise à jour vient de ce
 que l'app n'est pas sur le Play Store : « Installer quand même », ou couper l'analyse de Play Protect

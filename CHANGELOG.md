@@ -2,6 +2,13 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.24
+
+- **Fenêtre « Aucun accès à la position » : vraie correction** : le mode « réseau seul, sans GPS » des versions 0.19 à 0.23 ne laissait aucun fournisseur de position sur l'écran (il n'a pas de position par le réseau), donc la position restait coupée pour toutes les applis et Google affichait toujours sa fenêtre. La position passe maintenant en mode **appareil seul (GPS)** : elle est activée, sans scans Wi-Fi ni réseau Google, et sans module GPS branché rien ne tourne.
+- **Marche arrière : le blanc respire** (de 15 % à 100 % et retour, toutes les 2 s) au lieu d'être fixe.
+- **Plus de fausse « Auto Hold » en P** : le champ que l'app prenait pour l'Auto Hold est en fait le frein de parking (vrai en P, faux en roulant et aux feux). Il n'est plus lu ; l'arrêt en D après avoir roulé reste la seule détection.
+- **Limiteur de vitesse retiré** : le relevé `speedlimitsw` n'apparaît plus dans « Derniers événements ». Ce champ est l'affichage du panneau de vitesse, et le limiteur n'a aucun champ dans le flux de la voiture.
+
 ## 0.23
 
 - **Animation à l'arrêt sans l'Auto Hold** : le boîtier CAN du kit ne transmet pas l'Auto Hold sur cette Model 3 (vérifié le 23 nov. : deux Auto Hold, aucun message). L'arrêt est donc reconnu autrement : voiture à **0 km/h en D après avoir roulé** (même au pas). L'animation part après 1 s d'arrêt, toujours une fois sur 4 au hasard, et s'arrête au départ ou en passant en P, R ou N. Si un jour le boîtier transmet l'Auto Hold, il compte aussi.

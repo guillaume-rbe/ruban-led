@@ -34,11 +34,13 @@ final class UnitShell {
         /**
          * Owner, 22 Nov: Google's "Find My Device" popup at every start ("L'accès à la position de
          * l'appareil étant désactivé…", Fermer / Activer la localisation) comes from location being
-         * off. No GPS module is plugged in, so location goes on in network-only mode (2): no GPS,
-         * and with Google Location Accuracy off (Binnacle's UNIT-CHANGES) no Wi-Fi scans either.
-         * The GPS provider is also removed explicitly. Undo: LOCATION_MODE with the old mode.
+         * off. 0.19-0.23 used network-only mode (2) without GPS, but the dash has no network
+         * provider: no provider left at all, which is location off for every app, and the popup
+         * stayed (journal of 23 Nov, 17:36). Device-only mode (1, GPS provider) instead: location
+         * is on, no Google accuracy consent, and with no GPS module plugged in nothing runs.
+         * Undo: LOCATION_MODE with the old mode.
          */
-        LOCATION_NETWORK_ONLY("settings put secure location_mode 2 && settings put secure location_providers_allowed -gps && echo " + OK),
+        LOCATION_DEVICE_ONLY("settings put secure location_mode 1 && settings put secure location_providers_allowed +gps && echo " + OK),
         /** Puts back the mode read before the first change (%d: 0-3 only, checked in run). */
         LOCATION_MODE("settings put secure location_mode %d && echo " + OK);
 

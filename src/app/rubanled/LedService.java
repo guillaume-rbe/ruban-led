@@ -773,14 +773,14 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                     String before = UnitShell.run(UnitShell.Command.STATE);
                     if (want) {
                         if (!applied) Settings.saveUnitModeBefore(LedService.this, modeOf(before));
-                        UnitShell.run(UnitShell.Command.LOCATION_NETWORK_ONLY);
+                        UnitShell.run(UnitShell.Command.LOCATION_DEVICE_ONLY);
                     } else {
                         int old = Settings.loadUnitModeBefore(LedService.this);
                         if (old >= 0) UnitShell.run(UnitShell.Command.LOCATION_MODE, old);
                     }
                     Settings.saveUnitApplied(LedService.this, want);
                     final String after = UnitShell.run(UnitShell.Command.STATE);
-                    final String line = (want ? "Écran : position réseau seule, sans GPS" : "Écran : position remise comme avant")
+                    final String line = (want ? "Écran : position appareil seul (GPS)" : "Écran : position remise comme avant")
                         + " (avant " + before + " ; après " + after + ")";
                     main.post(new Runnable() { @Override public void run() { event(line); } });
                     if (want && attempt == 0) unitLogLater(45000);
@@ -1072,17 +1072,22 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         }
     };
 
-    /** Reverse gear (code 11 gear = 1): a soft white while it lasts, then the usual colour. */
+    /** Reverse gear (code 11 gear = 1): a breathing white while it lasts, then the usual colour. */
     @Override public void onGear(int gear) {
         boolean r = gear == 1;
         if (r == inReverse) return;
         inReverse = r;
         event(r ? "Marche arrière" : "Fin de marche arrière");
         if (r) showReverse();
-        else if (reverseLit) { reverseLit = false; afterAnimation(); }
+        else if (reverseLit) { reverseLit = false; main.removeCallbacks(reverseTick); afterAnimation(); }
     }
 
-    /** The reverse white, if wanted and nothing else is playing. */
+    /** Reverse breathing: one cycle, from the white down to REVERSE_LOW of it and back (owner, 23 Nov). */
+    private static final long REVERSE_PERIOD_MS = 2000, REVERSE_FRAME_MS = 120;
+    private static final double REVERSE_LOW = 0.15;
+    private int reverseWhite, reverseFrame;
+
+    /** The reverse white, breathing, if wanted and nothing else is playing. */
     private void showReverse() {
         trace("marche arrière : blanc" + (busy() && !reverseLit ? " refusé (" + busyWhy() + ")" : ""));
         if (!inReverse || !settings.reverseWhite || !link.isReady() || !present() || !screenIsOn
@@ -1090,15 +1095,27 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         int pct = targetPct();
         int white = Math.min(100, Math.max(pct + 30, Math.round(pct * 1.5f)));   // 20 % at night: 50 %
         if (strip == null || !strip.on) power(true);
+        boolean was = reverseLit;
         reverseLit = true;
-        ruleText = "Marche arrière : blanc";
-        colour(0, 0, white, false);
+        reverseWhite = white;
+        ruleText = "Marche arrière : blanc (respiration)";
+        if (was) return;                     // already breathing
+        reverseFrame = 0;
+        main.removeCallbacks(reverseTick);
+        main.post(reverseTick);
     }
 
-    /** speedlimitsw (code 10), meaning not known yet: only logged, to see whether the limiter moves it. */
-    @Override public void onSpeedLimitSw(String value) {
-        event("speedlimitsw = " + value);
-    }
+    private final Runnable reverseTick = new Runnable() {
+        @Override public void run() {
+            if (!reverseLit) return;
+            double t = (reverseFrame * REVERSE_FRAME_MS % REVERSE_PERIOD_MS) / (double) REVERSE_PERIOD_MS;
+            double level = REVERSE_LOW + (1 - REVERSE_LOW) * (0.5 + 0.5 * Math.cos(2 * Math.PI * t));
+            if (reverseFrame % 50 == 0) awake(10000);
+            if (link.isReady()) colour(0, 0, Math.max(1, (int) Math.round(reverseWhite * level)), false);
+            reverseFrame++;
+            main.postDelayed(this, REVERSE_FRAME_MS);
+        }
+    };
 
     /** Auto Hold on or off (code 9 "autohandlight"): after 1 s held, maybe an animation. */
     @Override public void onAutoHold(boolean on) {
@@ -1160,6 +1177,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         main.removeCallbacks(apFlashEnd);
         apFlash = false;
         reverseLit = false;
+        main.removeCallbacks(reverseTick);
         main.removeCallbacks(holdStart);
         main.removeCallbacks(holdTick);
         if (hold) ruleText = "";
@@ -1365,7 +1383,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             + ", nuit " + (s.night ? s.nightStartWinter + "h/" + s.nightStartSummer + "h-" + s.nightEnd + "h " + s.nightPct + "%" : "non")
             + ", animations " + (s.intro ? "×" + s.animRepeat : "non") + ", portes " + s.doorBlink + ", coffre " + s.bootAndFrunk
             + ", warnings " + s.hazard + ", arrêt " + (s.holdAnim ? "1/" + s.holdChance : "non") + ", autosteer " + s.apFlash
-            + ", marche arrière " + s.reverseWhite + ", écran sans GPS " + s.unitQuiet + ", commande courte " + s.shortColour
+            + ", marche arrière " + s.reverseWhite + ", écran position appareil " + s.unitQuiet + ", commande courte " + s.shortColour
             + ", musique CarPlay " + s.autoPlay + ", journal " + (s.journalFull ? "détaillé" : "normal")
             + (s.journalCodes == null || s.journalCodes.isEmpty() ? "" : " codes+ " + s.journalCodes);
     }

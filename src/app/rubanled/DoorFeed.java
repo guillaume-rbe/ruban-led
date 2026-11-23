@@ -35,17 +35,15 @@ final class DoorFeed {
         void onFeedState(String text);
         /** Code 9 "postlight": the parking / welcome lights (they come on when the car unlocks). */
         void onParkLights(boolean on);
-        /** Code 9 "autohandlight": Auto Hold, true while held at a standstill in D/R (Binnacle, 28 Oct). */
+        /** A stop in Drive after driving (stands in for Auto Hold, see stopCheck). */
         void onAutoHold(boolean on);
         /** Code 9 "autodrivermode": Autosteer on / off (Binnacle, verified 28 Oct). */
         void onAutosteer(boolean on);
-        /** Code 10 "speedlimitsw", meaning unknown (the speed limiter?): its raw value when it changes. */
-        void onSpeedLimitSw(String value);
         /** Code 11 "gear": 0 Park, 1 Reverse, 3 Drive (Binnacle, verified); when it changes. */
         void onGear(int gear);
     }
 
-    /** The codes the rules read: doors, lights, battery, speed (for speedlimitsw). */
+    /** The codes the rules read: doors, lights, battery, speed (stops in Drive). */
     private static final int[] CODES = {15, 9, 11, 10};
     /**
      * Subscribed: CODES plus the extra ones asked for in the app, for the journal only (0.20:
@@ -77,13 +75,13 @@ final class DoorFeed {
     private volatile boolean running;
     private volatile IBinder binder;
     private boolean registered;
-    private boolean left, right, charging, park, hold, autosteer;
-    private String limitSw;
+    private boolean left, right, charging, park, autosteer;
     private int gear = -1;
     /**
-     * The kit's CAN box never sets "autohandlight" on this Model 3 (owner's tests, 23 Nov: two Auto
-     * Holds, no code 9 at all), so a stop stands in for it: stopped (carspeed 0) in Drive after
-     * having driven at STOP_ARM_KMH or more.
+     * The kit's CAN box doesn't send Auto Hold on this Model 3. Its code 9 "autohandlight" is the
+     * parking brake (journal of 23 Nov: true in P at start-up and after parking, false from D on,
+     * false at every Auto Hold at a light), so it is not read. A stop stands in for Auto Hold:
+     * stopped (carspeed 0) in Drive after having driven at STOP_ARM_KMH or more.
      */
     private boolean moved, stopped;
     private int speed = -1;
@@ -98,10 +96,9 @@ final class DoorFeed {
         if (gear != 3) moved = false;                    // P, R or N: a new drive must start
         boolean now = moved && gear == 3 && speed == 0;
         if (now == stopped) return;
-        boolean was = hold || stopped;
         stopped = now;
         journal.log("CAN", now ? "arrêt en D après avoir roulé (vaut Auto Hold)" : "repart (fin de l'arrêt)");
-        if ((hold || stopped) != was) listener.onAutoHold(hold || stopped);
+        listener.onAutoHold(stopped);
     }
 
     /** looper: where messages and callbacks run (the service's high-priority thread). */
@@ -132,11 +129,6 @@ final class DoorFeed {
                             autosteer = lit(b, "autodrivermode", autosteer);
                             if (autosteer != was) DoorFeed.this.listener.onAutosteer(autosteer);
                         }
-                        if (b.containsKey("autohandlight")) {
-                            boolean was = hold || stopped;
-                            hold = lit(b, "autohandlight", hold);
-                            if ((hold || stopped) != was) DoorFeed.this.listener.onAutoHold(hold || stopped);
-                        }
                         if (b.containsKey("chargelight")) {
                             charging = lit(b, "chargelight", charging);
                             DoorFeed.this.listener.onBattery(percent, charging);
@@ -147,12 +139,6 @@ final class DoorFeed {
                         if (b.containsKey("carspeed")) {
                             speed = num(b, "carspeed", speed);
                             stopCheck();
-                        }
-                        if (!b.containsKey("speedlimitsw")) return;
-                        String v = String.valueOf(b.get("speedlimitsw"));
-                        if (!v.equals(limitSw)) {
-                            limitSw = v;
-                            DoorFeed.this.listener.onSpeedLimitSw(v);
                         }
                         return;
                     }

@@ -169,8 +169,8 @@ public final class MainActivity extends Activity {
             s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } });
         toggle(rules, "Blanc en marche arrière", "Un blanc doux, un peu plus fort que la couleur permanente, le temps de la marche arrière",
             s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } });
-        toggle(rules, "Écran : position sans GPS (plus d'alerte Google)",
-            "Position en mode réseau seul, sans GPS (pas de module branché) : la fenêtre « accès à la position désactivé » de Google ne s'affiche plus au démarrage. Désactiver remet le mode d'avant.",
+        toggle(rules, "Écran : position activée (plus d'alerte Google)",
+            "Position en mode « appareil seul » (GPS, sans scans Wi-Fi ni réseau Google ; pas de module branché, donc rien ne tourne) : la fenêtre « accès à la position désactivé » de Google ne s'affiche plus au démarrage. Désactiver remet le mode d'avant.",
             s.unitQuiet, new Toggle() { public void set(Settings x, boolean v) { x.unitQuiet = v; } });
         toggle(rules, "Clignoter quand une porte s'ouvre", null,
             s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; } });
