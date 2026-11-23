@@ -44,7 +44,7 @@ public final class MainActivity extends Activity {
     private static final int WARN = 0xFFFFB300;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private TextView remoteLine, nightSummary;
+    private TextView remoteLine, remoteUrl, nightSummary;
     private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine, autoPlayLine;
     private Button autoPlayAccess;
     private View linkDot;
@@ -282,8 +282,11 @@ public final class MainActivity extends Activity {
             "Pendant CarPlay, l'iPhone ouvre la même page dans Safari (à mettre en favori ou sur l'écran d'accueil). "
                 + "Seulement sur le Wi-Fi de CarPlay, jamais sur un autre réseau, et avec le code ci-dessous.",
             s.remote, new Toggle() { public void set(Settings x, boolean v) { x.remote = v; } }));
-        remoteLine = text("", 15, TEXT, false);
-        remoteLine.setTextIsSelectable(true);
+        remoteUrl = text("", 20, TEXT, true);
+        remoteUrl.setTextIsSelectable(true);
+        remoteUrl.setPadding(0, dp(8), 0, dp(2));
+        phone.addView(remoteUrl);
+        remoteLine = text("", 13, MUTED, false);
         phone.addView(remoteLine);
         Button newCode = pill("Nouveau code", false);
         newCode.setOnClickListener(new View.OnClickListener() {
@@ -386,9 +389,15 @@ public final class MainActivity extends Activity {
                 seenChanges = RemoteServer.changes;
                 syncFromPhone();
             }
-            String addr = RemoteServer.addressText;
-            remoteLine.setText("Code : " + Settings.remoteCode(MainActivity.this)
-                + (Settings.load(MainActivity.this).remote ? "\n" + (addr.isEmpty() ? "Démarrage…" : addr) : "\nDésactivé"));
+            // the address to open on the iPhone, big, and whether it answers right now
+            boolean on = Settings.load(MainActivity.this).remote;
+            String url = RemoteServer.url(MainActivity.this);
+            remoteUrl.setText(url != null ? url : "Code " + Settings.remoteCode(MainActivity.this));
+            remoteUrl.setAlpha(on ? 1f : 0.45f);
+            remoteLine.setText(!on ? "Désactivé : la page ne répond pas"
+                : RemoteServer.live ? "● Joignable maintenant depuis l'iPhone (Safari, connecté en CarPlay)"
+                : url != null ? "Joignable dès que l'iPhone est connecté en CarPlay (dernière adresse vue)"
+                : "L'adresse complète s'affiche à la première connexion de l'iPhone en CarPlay");
             autoPlayAccess.setVisibility(CarPlayAutoPlay.hasAccess(MainActivity.this) ? View.GONE : View.VISIBLE);
             refreshJournal();
             main.postDelayed(this, Journal.sending ? 250 : 1000);

@@ -141,14 +141,15 @@ tout cela n'est dans ce dépôt. Côté serveur, il suffit d'accepter un `PUT` s
 
 ## Contrôle depuis l'iPhone (0.25)
 
-Carte « Contrôle depuis l'iPhone », interrupteur « Page web sur le Wi-Fi CarPlay » (**désactivé par
+Carte « Contrôle depuis l'iPhone », interrupteur « Page web sur le Wi-Fi CarPlay » (**activé par
 défaut**). En CarPlay sans fil, l'iPhone est connecté au Wi-Fi Direct que l'écran crée pour CarPlay :
 Ruban LED y sert une page web (port 8080) avec la même chose que son écran : état, actions et
 boutons de test, couleurs permanente et d'alerte, règles, derniers événements. Les réglages de
 l'écran (position, journaux, adresse du ruban, mise à jour) n'y sont pas.
 
-- **Adresse** : `http://<IP de l'écran sur le Wi-Fi CarPlay>:8080/<code>`, affichée dans la carte et
-  notée dans « Derniers événements » (« iPhone : page sur … ») dès que l'iPhone est connecté. Dans
+- **Adresse** : `http://<IP de l'écran sur le Wi-Fi CarPlay>:8080/<code>`, affichée en grand dans la
+  carte, avec dessous si elle répond maintenant ; hors CarPlay, la dernière adresse vue (gardée sur
+  l'écran). Aussi notée dans « Derniers événements » (« iPhone : page sur … ») à chaque connexion. Dans
   Safari : Partager → « Sur l'écran d'accueil » (s'ouvre en plein écran comme une appli) ou favori.
 - **Seulement sur le Wi-Fi CarPlay** : une connexion arrivée par une autre interface que `p2p…`
   (Wi-Fi de la maison, partage de connexion…) est fermée sans réponse.

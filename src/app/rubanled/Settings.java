@@ -44,7 +44,7 @@ final class Settings {
      * popup no longer shows at start; applied through the dash's own ADB at every start (UnitShell).
      */
     boolean unitQuiet;
-    /** Control from the iPhone over the CarPlay Wi-Fi (0.25, RemoteServer): off by default. */
+    /** Control from the iPhone over the CarPlay Wi-Fi (0.25, RemoteServer): on by default (owner, 23 Nov). */
     boolean remote;
     /**
      * Journal (0.20): full detail (every CAN message, every Bluetooth frame, strip replies) or
@@ -87,7 +87,7 @@ final class Settings {
         s.reverseWhite = p.getBoolean("reverseWhite", true);
         s.shortColour = p.getInt("shortColour", -1);
         s.unitQuiet = p.getBoolean("unitQuiet", true);
-        s.remote = p.getBoolean("remote", false);
+        s.remote = p.getBoolean("remote", true);
         s.journalFull = p.getBoolean("journalFull", true);
         s.journalCodes = p.getString("journalCodes", "");
         s.holdChance = p.getInt("holdChance", 4);
@@ -216,6 +216,15 @@ final class Settings {
         String c = prefs(ctx).getString("remoteCode", "");
         if (c.length() != 6) c = newRemoteCode(ctx);
         return c;
+    }
+
+    /** The dash's last address on the CarPlay Wi-Fi ("" none yet), shown while CarPlay is off. */
+    static String loadRemoteIp(Context ctx) {
+        return prefs(ctx).getString("remoteIp", "");
+    }
+
+    static void saveRemoteIp(Context ctx, String ip) {
+        prefs(ctx).edit().putString("remoteIp", ip).apply();
     }
 
     static synchronized String newRemoteCode(Context ctx) {

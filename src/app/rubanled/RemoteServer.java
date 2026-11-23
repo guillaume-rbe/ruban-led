@@ -34,8 +34,8 @@ import java.util.concurrent.Executors;
  */
 final class RemoteServer {
     static final int PORT = 8080;
-    /** Shown in the app: the address to open on the iPhone, or why there is none. */
-    static volatile String addressText = "";
+    /** True while the CarPlay Wi-Fi is up (the page answers now), for the app's card. */
+    static volatile boolean live;
     /** Counts colour and rule changes made from the iPhone, once applied: the app's screen redraws them. */
     static volatile int changes;
 
@@ -91,12 +91,19 @@ final class RemoteServer {
         try { if (server != null) server.close(); } catch (IOException ignored) {}
         if (addressThread != null) addressThread.interrupt();
         pool.shutdownNow();
-        addressText = "";
+        live = false;
     }
 
     // ---- addresses ----
 
     /** The dash's IPv4 address on the CarPlay Wi-Fi (an interface named p2p…), or null. */
+    /** The address to put in the iPhone's favourites: the current CarPlay one, else the last seen; null if never seen. */
+    static String url(Context ctx) {
+        String ip = carPlayAddress();
+        if (ip == null) ip = Settings.loadRemoteIp(ctx);
+        return ip.isEmpty() ? null : "http://" + ip + ":" + PORT + "/" + Settings.remoteCode(ctx);
+    }
+
     static String carPlayAddress() {
         try {
             for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
@@ -134,8 +141,8 @@ final class RemoteServer {
         while (running) {
             String a = carPlayAddress();
             String url = a == null ? null : "http://" + a + ":" + PORT + "/" + code;
-            addressText = url != null ? url
-                : "En attente du Wi-Fi CarPlay (adresse affichée quand l'iPhone est connecté)";
+            live = a != null;
+            if (a != null && !a.equals(Settings.loadRemoteIp(ctx))) Settings.saveRemoteIp(ctx, a);
             if (url == null ? lastAddress != null : !url.equals(lastAddress)) {
                 lastAddress = url;
                 host.event(url != null ? "iPhone : page sur " + url
