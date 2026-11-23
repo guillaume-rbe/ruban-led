@@ -2,6 +2,10 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.22
+
+- **Plus de fermeture forcée au redémarrage du service** : le service répond à Android à chaque demande de démarrage (ouverture de l'app, chien de garde, mise à jour), et plus seulement la première fois. Le 23 nov., un redémarrage tombé pendant une de ces demandes avait fait fermer l'app par Android (elle était repartie seule 20 s après).
+
 ## 0.21
 
 - **Page mieux répartie** : les cartes « Journaux » et « Derniers événements » passent à gauche, sous « Couleurs », et les deux colonnes finissent à la même hauteur : la page défile beaucoup moins.

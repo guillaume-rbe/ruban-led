@@ -325,6 +325,9 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     }
 
     @Override public int onStartCommand(final Intent intent, int flags, int startId) {
+        // every startForegroundService() (the app, the watchdog, an update) must be answered within
+        // 5 s, not only the first: on 23 Nov a restart during one was killed by Android (ANR)
+        startForeground(1, notification());
         main.post(new Runnable() {
             @Override public void run() { handle(intent); }
         });
