@@ -25,7 +25,8 @@
   .muted { color:var(--muted); font-size:15px; }
   .warn { color:var(--warn); font-weight:600; font-size:15px; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .grid3 { display:grid; grid-template-columns:1fr 1fr 1.3fr; gap:8px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1.7fr; gap:8px; }
+  .grid3 button { white-space:nowrap; padding:13px 4px; }
   button { font:inherit; font-size:15px; color:var(--text); background:#262A31; border:1px solid var(--line);
            border-radius:12px; padding:13px 8px; min-height:50px; width:100%; }
   button:active { background:#333944; }
@@ -42,7 +43,7 @@
   input.hue { background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); }
   .switch { display:flex; align-items:center; gap:12px; padding:9px 0; border-top:1px solid var(--line); }
   .switch:first-of-type { border-top:none; }
-  .switch span { flex:1; }
+  .switch > span:first-child { flex:1; min-width:0; }
   .switch small { display:block; color:var(--muted); font-size:13px; }
   .tog { position:relative; width:52px; height:32px; flex:none; }
   .tog input { opacity:0; width:0; height:0; }
