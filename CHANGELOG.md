@@ -2,6 +2,10 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.25
+
+- **Contrôle depuis l'iPhone pendant CarPlay** (option, désactivée par défaut, carte « Contrôle depuis l'iPhone ») : Ruban LED sert une page web sur le Wi-Fi de CarPlay, avec la même chose que son écran (état, allumer / éteindre / couleur permanente, boutons de test, couleurs permanente et d'alerte, règles, derniers événements). L'adresse (`http://…:8080/<code>`) s'affiche dans la carte et dans « Derniers événements » quand l'iPhone est connecté ; à mettre en favori ou sur l'écran d'accueil de l'iPhone depuis Safari. Elle ne répond que sur le Wi-Fi de CarPlay, jamais sur un autre réseau, et seulement avec le code à 6 chiffres de l'adresse (« Nouveau code » pour en changer).
+
 ## 0.24
 
 - **Fenêtre « Aucun accès à la position » : vraie correction** : le mode « réseau seul, sans GPS » des versions 0.19 à 0.23 ne laissait aucun fournisseur de position sur l'écran (il n'a pas de position par le réseau), donc la position restait coupée pour toutes les applis et Google affichait toujours sa fenêtre. La position passe maintenant en mode **appareil seul (GPS)** : elle est activée, sans scans Wi-Fi ni réseau Google, et sans module GPS branché rien ne tourne.

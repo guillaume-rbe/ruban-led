@@ -43,6 +43,8 @@ final class Settings {
      * popup no longer shows at start; applied through the dash's own ADB at every start (UnitShell).
      */
     boolean unitQuiet;
+    /** Control from the iPhone over the CarPlay Wi-Fi (0.25, RemoteServer): off by default. */
+    boolean remote;
     /**
      * Journal (0.20): full detail (every CAN message, every Bluetooth frame, strip replies) or
      * only the main lines; extra CAN codes to record ("2,3,4", "0-127"; empty: none).
@@ -84,6 +86,7 @@ final class Settings {
         s.reverseWhite = p.getBoolean("reverseWhite", true);
         s.shortColour = p.getInt("shortColour", -1);
         s.unitQuiet = p.getBoolean("unitQuiet", true);
+        s.remote = p.getBoolean("remote", false);
         s.journalFull = p.getBoolean("journalFull", true);
         s.journalCodes = p.getString("journalCodes", "");
         s.holdChance = p.getInt("holdChance", 4);
@@ -118,6 +121,7 @@ final class Settings {
             .putBoolean("reverseWhite", reverseWhite)
             .putInt("shortColour", shortColour)
             .putBoolean("unitQuiet", unitQuiet)
+            .putBoolean("remote", remote)
             .putBoolean("journalFull", journalFull)
             .putString("journalCodes", journalCodes)
             .putInt("holdChance", holdChance)
@@ -201,6 +205,22 @@ final class Settings {
 
     static void saveUnitModeBefore(Context ctx, int mode) {
         prefs(ctx).edit().putInt("unitModeBefore", mode).apply();
+    }
+
+    /**
+     * The code in the iPhone page's address (6 digits), drawn once and kept, apart from save().
+     * A new one is drawn by newRemoteCode (the app's « Nouveau code »).
+     */
+    static synchronized String remoteCode(Context ctx) {
+        String c = prefs(ctx).getString("remoteCode", "");
+        if (c.length() != 6) c = newRemoteCode(ctx);
+        return c;
+    }
+
+    static synchronized String newRemoteCode(Context ctx) {
+        String c = String.format(java.util.Locale.ROOT, "%06d", new java.security.SecureRandom().nextInt(1000000));
+        prefs(ctx).edit().putString("remoteCode", c).commit();
+        return c;
     }
 
     private static SharedPreferences prefs(Context ctx) {

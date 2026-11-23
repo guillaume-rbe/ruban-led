@@ -294,6 +294,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         unitThread.start();
         unit = new android.os.Handler(unitThread.getLooper());
         unitApply(0);
+        applyRemote();
         IntentFilter screen = new IntentFilter(Intent.ACTION_SCREEN_ON);
         screen.addAction(Intent.ACTION_SCREEN_OFF);
         registerReceiver(screenOn, screen, null, main);
@@ -307,6 +308,33 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 autoPlay.setEnabled(settings.autoPlay);
             }
         });
+    }
+
+    /** The iPhone page on the CarPlay Wi-Fi (0.25), null while its switch is off. */
+    private RemoteServer remote;
+    private String remoteCode;
+
+    /** Starts or stops the iPhone page as its switch says (a new code restarts it). */
+    private void applyRemote() {
+        String code = Settings.remoteCode(this);
+        if (remote != null && (!settings.remote || !code.equals(remoteCode))) {
+            remote.stop();
+            remote = null;
+            if (!settings.remote) event("iPhone : contrôle coupé");
+        }
+        if (settings.remote && remote == null) {
+            remoteCode = code;
+            remote = new RemoteServer(this, new RemoteServer.Host() {
+                @Override public void handle(final Intent i) {
+                    main.post(new Runnable() { @Override public void run() { LedService.this.handle(i); } });
+                }
+                @Override public void event(final String what) {
+                    main.post(new Runnable() { @Override public void run() { LedService.this.event(what); } });
+                }
+            }, code);
+            remote.start();
+            event("iPhone : contrôle activé (port " + RemoteServer.PORT + ")");
+        }
     }
 
     /** Music on when CarPlay connects (owner, 17 Nov). */
@@ -344,6 +372,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             main.removeCallbacks(nightCheck);
             main.post(nightCheck);
             unitApply(0);              // the dash switch may have changed
+            applyRemote();             // the iPhone switch, or a new code
             applyJournalSettings();
             journal.log("APP", "réglages : " + settingsLine());
         } else if (ACTION_TEST_BLINK.equals(a)) {
@@ -402,6 +431,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         unitThread.quitSafely();
         try { unregisterReceiver(screenOn); } catch (Throwable ignored) {}
         autoPlay.stop();
+        if (remote != null) { remote.stop(); remote = null; }
         doors.stop();
         link.quit();
         if (wake.isHeld()) wake.release();
@@ -1383,7 +1413,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             + ", nuit " + (s.night ? s.nightStartWinter + "h/" + s.nightStartSummer + "h-" + s.nightEnd + "h " + s.nightPct + "%" : "non")
             + ", animations " + (s.intro ? "×" + s.animRepeat : "non") + ", portes " + s.doorBlink + ", coffre " + s.bootAndFrunk
             + ", warnings " + s.hazard + ", arrêt " + (s.holdAnim ? "1/" + s.holdChance : "non") + ", autosteer " + s.apFlash
-            + ", marche arrière " + s.reverseWhite + ", écran position appareil " + s.unitQuiet + ", commande courte " + s.shortColour
+            + ", marche arrière " + s.reverseWhite + ", écran position appareil " + s.unitQuiet + ", iPhone " + s.remote + ", commande courte " + s.shortColour
             + ", musique CarPlay " + s.autoPlay + ", journal " + (s.journalFull ? "détaillé" : "normal")
             + (s.journalCodes == null || s.journalCodes.isEmpty() ? "" : " codes+ " + s.journalCodes);
     }

@@ -44,6 +44,7 @@ public final class MainActivity extends Activity {
     private static final int WARN = 0xFFFFB300;
 
     private final Handler main = new Handler(Looper.getMainLooper());
+    private TextView remoteLine;
     private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine, autoPlayLine;
     private Button autoPlayAccess;
     private View linkDot;
@@ -250,6 +251,28 @@ public final class MainActivity extends Activity {
         journalCodes.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
         journal.addView(jc);
 
+        // the iPhone page on the CarPlay Wi-Fi (0.25, owner 23 Nov)
+        LinearLayout phone = card(right, "Contrôle depuis l'iPhone");
+        toggle(phone, "Page web sur le Wi-Fi CarPlay",
+            "Pendant CarPlay, l'iPhone ouvre la même page dans Safari (à mettre en favori ou sur l'écran d'accueil). "
+                + "Seulement sur le Wi-Fi de CarPlay, jamais sur un autre réseau, et avec le code ci-dessous.",
+            s.remote, new Toggle() { public void set(Settings x, boolean v) { x.remote = v; } });
+        remoteLine = text("", 15, TEXT, false);
+        remoteLine.setTextIsSelectable(true);
+        phone.addView(remoteLine);
+        Button newCode = pill("Nouveau code", false);
+        newCode.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                Settings.newRemoteCode(MainActivity.this);
+                LedService.send(MainActivity.this, LedService.ACTION_RELOAD);
+                Toast.makeText(MainActivity.this, "Nouveau code : l'ancienne adresse ne marche plus", Toast.LENGTH_LONG).show();
+            }
+        });
+        LinearLayout.LayoutParams nc = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        nc.topMargin = dp(8);
+        phone.addView(newCode, nc);
+
         LinearLayout strip = card(right, "Ruban et application");
         strip.addView(text("Adresse Bluetooth du ruban", 14, MUTED, false));
         address = new EditText(this);
@@ -334,6 +357,9 @@ public final class MainActivity extends Activity {
             presenceLine.setText(LedService.presenceText);
             eventsLine.setText(LedService.eventsText.isEmpty() ? "—" : LedService.eventsText);
             autoPlayLine.setText(CarPlayAutoPlay.text);
+            String addr = RemoteServer.addressText;
+            remoteLine.setText("Code : " + Settings.remoteCode(MainActivity.this)
+                + (Settings.load(MainActivity.this).remote ? "\n" + (addr.isEmpty() ? "Démarrage…" : addr) : "\nDésactivé"));
             autoPlayAccess.setVisibility(CarPlayAutoPlay.hasAccess(MainActivity.this) ? View.GONE : View.VISIBLE);
             refreshJournal();
             main.postDelayed(this, Journal.sending ? 250 : 1000);
