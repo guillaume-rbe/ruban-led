@@ -2,6 +2,12 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.21
+
+- **Page mieux répartie** : les cartes « Journaux » et « Derniers événements » passent à gauche, sous « Couleurs », et les deux colonnes finissent à la même hauteur : la page défile beaucoup moins.
+- **Boutons alignés** : « Couleur permanente » (sur deux lignes) n'est plus décalé vers le bas, les trois boutons d'action ont la même hauteur ; même chose pour les champs des réglages (« Clignot. (ms) »).
+- **Événement « Écran : position » lisible** : il ne contient plus le message d'erreur Android « Broken pipe ».
+
 ## 0.20
 
 - **Journal de débogage** : tout ce que l'app voit et fait est gardé sur l'écran (un fichier par jour, 7 au plus : aujourd'hui et les 6 jours d'avant, d'après la date du fichier ; 150 Mo au plus, de quoi garder une semaine avec de longs trajets ; les plus anciens sont supprimés automatiquement, vérifié chaque heure et juste après minuit) : événements, décisions des règles avec leur raison (« Auto Hold : pas d'animation, recharge »…), chaque message CAN avec tous ses champs, chaque commande Bluetooth avec son accusé de réception et son délai, les réponses du ruban, l'état de la liaison, les commandes de l'écran et les plantages.

@@ -29,7 +29,8 @@ final class UnitShell {
          * 3 high accuracy), providers, and the screen in front (to name the popup if it still shows).
          */
         STATE("echo mode=$(settings get secure location_mode) fournisseurs=$(settings get secure location_providers_allowed)"
-            + " devant=$(dumpsys activity activities | grep -m1 mResumedActivity | sed 's/.* u0 //; s/ .*//'); echo " + OK),
+            // 2>/dev/null: grep -m1 closes the pipe early and dumpsys says "Broken pipe" (0.20 log)
+            + " devant=$(dumpsys activity activities 2>/dev/null | grep -m1 mResumedActivity | sed 's/.* u0 //; s/ .*//'); echo " + OK),
         /**
          * Owner, 22 Nov: Google's "Find My Device" popup at every start ("L'accès à la position de
          * l'appareil étant désactivé…", Fermer / Activer la localisation) comes from location being

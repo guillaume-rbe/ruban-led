@@ -119,14 +119,11 @@ public final class MainActivity extends Activity {
         colours.addView(alertPanel.view);
         setColoursLocked(true);
 
-        LinearLayout log = card(left, "Derniers événements");
-        eventsLine = text("", 14, MUTED, false);
-        eventsLine.setTypeface(Typeface.MONOSPACE);
-        log.addView(eventsLine);
-
         // ---- right: actions, rules, strip
         LinearLayout actions = card(right, "Actions");
         LinearLayout row2 = new LinearLayout(this);
+        // not aligned on the text's baseline: "Couleur permanente" on two lines sat lower (owner, 23 Nov)
+        row2.setBaselineAligned(false);
         // test buttons: two per line, with names that say what they play (owner, 22 Nov)
         LinearLayout testRow = column(), t1 = new LinearLayout(this), t2 = new LinearLayout(this);
         t1.addView(action("Animation d'allumage", LedService.ACTION_INTRO, true), weight(1, dp(8)));
@@ -138,9 +135,9 @@ public final class MainActivity extends Activity {
             LinearLayout.LayoutParams.WRAP_CONTENT);
         tp.topMargin = dp(8);
         testRow.addView(t2, tp);
-        row2.addView(action("Allumer", LedService.ACTION_ON, false), weight(1, dp(8)));
-        row2.addView(action("Éteindre", LedService.ACTION_OFF, false), weight(1, dp(8)));
-        row2.addView(action("Couleur permanente", LedService.ACTION_DEFAULT, false), weight(1.4f, 0));
+        row2.addView(action("Allumer", LedService.ACTION_ON, false), fill(weight(1, dp(8))));
+        row2.addView(action("Éteindre", LedService.ACTION_OFF, false), fill(weight(1, dp(8))));
+        row2.addView(action("Couleur permanente", LedService.ACTION_DEFAULT, false), fill(weight(1.4f, 0)));
         actions.addView(row2);
         // the test buttons are hidden until "Tests" is pressed (owner, 22 Nov)
         final Button tests = pill("Boutons de test ▸", false);
@@ -200,7 +197,7 @@ public final class MainActivity extends Activity {
                 + " h, jusqu'à " + s.nightEnd + " h : tout à " + s.nightPct + " %",
             s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } });
         LinearLayout n1 = new LinearLayout(this), n2 = new LinearLayout(this);
-        blinkMs = number(n1, "Clignotement (ms)", s.blinkMs);
+        blinkMs = number(n1, "Clignot. (ms)", s.blinkMs);
         blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
         repeat = number(n1, "Animations ×", s.animRepeat);
         holdChance = number(n1, "Arrêt : 1 sur", s.holdChance);
@@ -208,11 +205,13 @@ public final class MainActivity extends Activity {
         nightSummer = number(n2, "Nuit été (h)", s.nightStartSummer);
         nightEnd = number(n2, "jusqu'à (h)", s.nightEnd);
         nightPct = number(n2, "Lum. nuit (%)", s.nightPct);
+        // fields under a two-line label sat lower: no baseline alignment in these rows (owner, 23 Nov)
+        for (LinearLayout r : new LinearLayout[] { n1, n2, t1, t2 }) r.setBaselineAligned(false);
         rules.addView(n1);
         rules.addView(n2);
 
         // ---- journal (0.20): sent on demand, the steps and a progress bar shown here
-        LinearLayout journal = card(right, "Journaux (débogage)");
+        LinearLayout journal = card(left, "Journaux (débogage)");  // left: the right column was much longer (owner, 23 Nov)
         journalState = text("", 13, MUTED, false);
         journal.addView(journalState);
         LinearLayout js = new LinearLayout(this);
@@ -224,6 +223,7 @@ public final class MainActivity extends Activity {
         sendAll.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { sendLogs(0); }
         });
+        js.setBaselineAligned(false);
         js.addView(send24, weight(1.6f, dp(8)));
         js.addView(sendAll, weight(1, 0));
         LinearLayout.LayoutParams jsp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
@@ -268,12 +268,18 @@ public final class MainActivity extends Activity {
         update.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { update(); }
         });
+        r3.setBaselineAligned(false);
         r3.addView(save, weight(1, dp(8)));
         r3.addView(update, weight(1, 0));
         strip.addView(r3);
         updateText = text("Version " + Updater.installedVersion(this) + "  ·  github.com/" + Updater.REPO, 13, MUTED, false);
         updateText.setPadding(0, dp(8), 0, 0);
         strip.addView(updateText);
+
+        LinearLayout log = card(left, "Derniers événements");
+        eventsLine = text("", 14, MUTED, false);
+        eventsLine.setTypeface(Typeface.MONOSPACE);
+        log.addView(eventsLine);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(BG);
@@ -540,6 +546,12 @@ public final class MainActivity extends Activity {
         g.setShape(GradientDrawable.OVAL);
         g.setColor(colour);
         v.setBackground(g);
+    }
+
+    /** Same height for every button of a row. */
+    private static LinearLayout.LayoutParams fill(LinearLayout.LayoutParams lp) {
+        lp.height = LinearLayout.LayoutParams.MATCH_PARENT;
+        return lp;
     }
 
     private LinearLayout.LayoutParams weight(float w, int rightMargin) {
