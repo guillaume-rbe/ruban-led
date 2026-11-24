@@ -128,7 +128,9 @@ ligne par fait : `HH:mm:ss.SSS ÉTIQUETTE message`.
 | `LIEN` | connexion Bluetooth, MTU |
 | `ECRAN` / `APP` / `ENVOI` | commandes de l'écran, démarrage, réglages, plantages, envois |
 
-**Journal détaillé** (activé par défaut) : `CAN` de tous les codes et `BLE` de chaque image ; sinon
+**Journal détaillé** (activé par défaut) : `CAN` de tous les codes (une ligne quand un champ change, la
+puissance instantanée seule ne compte pas ; sinon une par minute) et `BLE` de chaque commande, avec pour
+chaque animation sa première image et une ligne de résumé (0.26) ; sinon
 seulement les données des règles et les commandes. **Codes CAN en plus** : `2,3,4` ou `0-127`,
 enregistrés tels quels (abonnement en lecture seule, comme les autres).
 
@@ -156,7 +158,8 @@ l'écran (position, journaux, adresse du ruban, mise à jour) n'y sont pas.
 - **Seulement sur le Wi-Fi CarPlay** : une connexion arrivée par une autre interface que `p2p…`
   (Wi-Fi de la maison, partage de connexion…) est fermée sans réponse.
 - **Code à 6 chiffres** dans l'adresse, tiré au hasard et gardé sur l'écran ; « Nouveau code » en tire
-  un autre (l'ancienne adresse ne marche plus). 5 mauvais codes depuis une même adresse : 1 min de blocage.
+  un autre (l'ancienne adresse ne marche plus). 5 mauvais codes depuis une même adresse : 1 min de blocage
+  (les icônes demandées par le navigateur ne comptent pas, un bon code remet le compte à zéro, 0.26).
 - La page passe par le service comme l'écran de l'app (mêmes commandes) ; rien ne va à la voiture.
   Un changement fait depuis l'iPhone (couleur, règle) s'affiche aussitôt sur l'écran de l'app (sauf
   pendant qu'on y modifie soi-même une couleur, barres déverrouillées).

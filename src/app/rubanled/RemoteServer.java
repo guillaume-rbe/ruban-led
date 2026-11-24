@@ -195,18 +195,23 @@ final class RemoteServer {
             if (req == null) return;
             String method = req[0], path = req[1];
             OutputStream out = s.getOutputStream();
-            if (locked(peer)) { reply(out, 429, "text/plain", "Trop d'essais, réessayer dans une minute"); return; }
 
             String query = "";
             int q = path.indexOf('?');
             if (q >= 0) { query = path.substring(q + 1); path = path.substring(0, q); }
+            // icons the browser asks for by itself (Safari, Firefox: favicon, apple-touch-icon*):
+            // never a wrong code, and answered even while the address is locked (24 Nov: five
+            // such requests locked the iPhone out for a minute)
+            if (isIconRequest(path)) { reply(out, 404, "text/plain", "Introuvable"); return; }
+            if (locked(peer)) { reply(out, 429, "text/plain", "Trop d'essais, réessayer dans une minute"); return; }
             String[] parts = path.split("/");
             // parts[0] is "" (path starts with "/"), parts[1] the code
             if (parts.length < 2 || !code.equals(parts[1])) {
-                if (!"/favicon.ico".equals(path)) wrongCode(peer);
+                wrongCode(peer);
                 reply(out, 404, "text/plain", "Introuvable");
                 return;
             }
+            rightCode(peer);
             Map<String, String> p = params(query);
             String what = parts.length > 2 ? parts[2] : "";
             if (what.isEmpty() && "GET".equals(method)) {
@@ -285,6 +290,19 @@ final class RemoteServer {
     private synchronized boolean locked(String peer) {
         Long until = lockedUntil.get(peer);
         return until != null && System.currentTimeMillis() < until;
+    }
+
+    /** A path at the root that a browser fetches on its own: /favicon.ico, /apple-touch-icon*.png… */
+    static boolean isIconRequest(String path) {
+        if (path.indexOf('/', 1) >= 0) return false;        // only at the root, never under the code
+        String p = path.toLowerCase(java.util.Locale.ROOT);
+        return p.startsWith("/favicon") || p.startsWith("/apple-touch-icon")
+            || p.equals("/robots.txt") || p.equals("/manifest.json") || p.equals("/site.webmanifest");
+    }
+
+    /** The right code: earlier misses from this address are forgotten. */
+    private synchronized void rightCode(String peer) {
+        wrong.remove(peer);
     }
 
     private synchronized void wrongCode(String peer) {

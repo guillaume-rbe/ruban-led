@@ -223,6 +223,7 @@ final class LedLink {
     };
 
     private void closeGatt() {
+        flushBurst();
         ready = false;
         readied = false;
         writing = false;
@@ -260,8 +261,19 @@ final class LedLink {
         acked = false;
         writeStartMs = android.os.SystemClock.elapsedRealtime();
         writeKind = c.type == Zengge.TYPE_QUERY ? "requête" : c.frame ? "image" : "commande";
-        if (journal.full()) journal.log("BLE", "envoi " + writeKind + " " + Journal.hex(c.data, 120) + " (file " + queue.size() + ")");
-        else if (!c.frame) journal.log("BLE", "envoi " + writeKind + " " + Journal.hex(c.data, 16));
+        if (c.frame) {
+            // animation images: the first one written out, then one summary line per animation
+            // (24 Nov: two lines per image made 4 400 of the journal's 22 800 lines)
+            if (journal.full() && burstFrames == 0) journal.log("BLE", "début d'animation, première image " + Journal.hex(c.data, 120));
+            burstFrames++;
+            burstQueueMax = Math.max(burstQueueMax, queue.size());
+            h.removeCallbacks(burstEnd);
+            h.postDelayed(burstEnd, BURST_END_MS);       // also written if no image is acknowledged
+        } else {
+            flushBurst();
+            if (journal.full()) journal.log("BLE", "envoi " + writeKind + " " + Journal.hex(c.data, 120) + " (file " + queue.size() + ")");
+            else journal.log("BLE", "envoi " + writeKind + " " + Journal.hex(c.data, 16));
+        }
         // onCharacteristicWrite normally clears this; the timer is a safety net.
         h.removeCallbacks(writeDone);
         h.postDelayed(writeDone, WRITE_TIMEOUT_MS);
@@ -270,6 +282,27 @@ final class LedLink {
     private final Runnable retryPump = new Runnable() {
         @Override public void run() { pump(); }
     };
+
+    // ---- one journal line per animation ----
+    private int burstFrames, burstAcked, burstQueueMax;
+    private long burstAckSum, burstAckMax;
+    /** No image for this long: the animation is over, its summary is written. */
+    private static final long BURST_END_MS = 1500;
+
+    private final Runnable burstEnd = new Runnable() {
+        @Override public void run() { flushBurst(); }
+    };
+
+    private void flushBurst() {
+        h.removeCallbacks(burstEnd);
+        if (burstFrames == 0) return;
+        String acks = burstAcked == 0 ? "aucun accusé"
+            : "accusé moyen " + (burstAckSum / burstAcked) + " ms, max " + burstAckMax + " ms";
+        journal.detail("BLE", "fin d'animation : " + burstFrames + " images envoyées, " + acks
+            + ", file max " + burstQueueMax);
+        burstFrames = burstAcked = burstQueueMax = 0;
+        burstAckSum = burstAckMax = 0;
+    }
 
     private long gap() {
         return writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT ? GAP_ACKED_MS : GAP_UNACKED_MS;
@@ -380,6 +413,13 @@ final class LedLink {
                     acked = true;
                     long ms = android.os.SystemClock.elapsedRealtime() - writeStartMs;
                     if (status != 0) journal.log("BLE", "accusé " + writeKind + " en erreur, statut " + status + " (" + ms + " ms)");
+                    else if ("image".equals(writeKind)) {
+                        burstAcked++;
+                        burstAckSum += ms;
+                        burstAckMax = Math.max(burstAckMax, ms);
+                        h.removeCallbacks(burstEnd);
+                        h.postDelayed(burstEnd, BURST_END_MS);
+                    }
                     else journal.detail("BLE", "accusé " + writeKind + " " + ms + " ms");
                     h.removeCallbacks(writeDone);
                     h.postDelayed(writeDone, gap());

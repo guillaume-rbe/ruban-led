@@ -2,6 +2,12 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.26
+
+- **Page iPhone : plus de blocage sans raison** : les icônes que le navigateur demande tout seul (Safari, Firefox : `favicon`, `apple-touch-icon…`) comptaient comme des mauvais codes, et 5 suffisaient à bloquer l'iPhone 1 min (vu le 24 nov. à 7 h 36). Elles ne comptent plus, et un bon code efface les erreurs passées.
+- **Page iPhone : interrupteurs rouges** quand ils sont activés, comme dans l'app (ils étaient verts).
+- **Journal détaillé environ 3 fois plus léger** : un message de vitesse n'est écrit que si la vitesse ou un autre champ change (la puissance instantanée changeait à chaque message, toutes les 70 ms), et une animation fait une ligne de résumé (nombre d'images, accusés moyen et max) au lieu de deux lignes par image. Le 24 nov., cela aurait fait environ 7 000 lignes au lieu de 22 800.
+
 ## 0.25
 
 - **Contrôle depuis l'iPhone pendant CarPlay** (option, activée par défaut, carte « Contrôle depuis l'iPhone ») : Ruban LED sert une page web sur le Wi-Fi de CarPlay, avec la même chose que son écran (état, allumer / éteindre / couleur permanente, boutons de test, couleurs permanente et d'alerte, règles, derniers événements). L'adresse (`http://…:8080/<code>`) s'affiche en grand dans la carte (hors CarPlay : la dernière adresse vue) et dans « Derniers événements » à chaque connexion de l'iPhone ; à mettre en favori ou sur l'écran d'accueil de l'iPhone depuis Safari. Elle ne répond que sur le Wi-Fi de CarPlay, jamais sur un autre réseau, et seulement avec le code à 6 chiffres de l'adresse (« Nouveau code » pour en changer). Ce qui est changé depuis l'iPhone s'affiche aussitôt sur l'écran de l'app.

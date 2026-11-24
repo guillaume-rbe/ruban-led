@@ -56,6 +56,9 @@ final class DoorFeed {
     private final java.util.HashMap<Integer, Long> lastCanMs = new java.util.HashMap<>();
     /** An unchanged message is still written this often (to show the feed is alive). */
     private static final long CAN_REPEAT_MS = 60000;
+    /** Fields that change all the time: written with the rest, but never a reason for a new line. */
+    private static final java.util.Set<String> NOISY_FIELDS =
+        new java.util.HashSet<>(java.util.Arrays.asList("curentergyval"));
 
     private static final String TAG = "rubanled";
     private static final String DESCRIPTOR = "com.mcu.iinterface.aidl.IMcuService";
@@ -239,13 +242,20 @@ final class DoorFeed {
         boolean rules = code == CODE_DOORS || code == CODE_LIGHTS || code == CODE_BATTERY;
         if (!rules && !journal.full()) return;            // code 10 (speed) and extra codes: full journal only
         StringBuilder s = new StringBuilder();
+        StringBuilder same = new StringBuilder();       // what must change for a new line
         java.util.TreeSet<String> keys = new java.util.TreeSet<>(b.keySet());
-        for (String k : keys) s.append(k).append('=').append(b.get(k)).append(' ');
+        for (String k : keys) {
+            s.append(k).append('=').append(b.get(k)).append(' ');
+            // the instant power changes in every speed message (every ~70 ms): 15 500 of the
+            // 22 800 lines of the 24 Nov journal. It is written, but alone it starts no new line.
+            if (!NOISY_FIELDS.contains(k)) same.append(k).append('=').append(b.get(k)).append(' ');
+        }
         String line = s.toString().trim();
+        String key = same.toString();
         long now = android.os.SystemClock.elapsedRealtime();
         Long last = lastCanMs.get(code);
-        if (line.equals(lastCan.get(code)) && last != null && now - last < CAN_REPEAT_MS) return;
-        lastCan.put(code, line);
+        if (key.equals(lastCan.get(code)) && last != null && now - last < CAN_REPEAT_MS) return;
+        lastCan.put(code, key);
         lastCanMs.put(code, now);
         journal.log("CAN", code + " " + line);
     }
