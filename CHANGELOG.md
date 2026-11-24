@@ -2,6 +2,10 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.27
+
+- **Vitesse presque plus journalisée** : elle ne sert qu'à reconnaître l'arrêt en D, déjà noté à part (« arrêt en D après avoir roulé », « repart »). Le journal détaillé ne l'écrit plus qu'au passage des seuils de cette règle (0, 1 et 15 km/h), et une fois par minute sinon. Le journal du 24 nov. passerait d'environ 22 800 à environ 1 800 lignes.
+
 ## 0.26
 
 - **Page iPhone : plus de blocage sans raison** : les icônes que le navigateur demande tout seul (Safari, Firefox : `favicon`, `apple-touch-icon…`) comptaient comme des mauvais codes, et 5 suffisaient à bloquer l'iPhone 1 min (vu le 24 nov. à 7 h 36). Elles ne comptent plus, et un bon code efface les erreurs passées.

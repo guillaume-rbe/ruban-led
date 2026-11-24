@@ -128,8 +128,8 @@ ligne par fait : `HH:mm:ss.SSS ÉTIQUETTE message`.
 | `LIEN` | connexion Bluetooth, MTU |
 | `ECRAN` / `APP` / `ENVOI` | commandes de l'écran, démarrage, réglages, plantages, envois |
 
-**Journal détaillé** (activé par défaut) : `CAN` de tous les codes (une ligne quand un champ change, la
-puissance instantanée seule ne compte pas ; sinon une par minute) et `BLE` de chaque commande, avec pour
+**Journal détaillé** (activé par défaut) : `CAN` de tous les codes (une ligne quand un champ change, sinon une
+par minute ; la vitesse seulement au passage de 0, 1 et 15 km/h, 0.27) et `BLE` de chaque commande, avec pour
 chaque animation sa première image et une ligne de résumé (0.26) ; sinon
 seulement les données des règles et les commandes. **Codes CAN en plus** : `2,3,4` ou `0-127`,
 enregistrés tels quels (abonnement en lecture seule, comme les autres).

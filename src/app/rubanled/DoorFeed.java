@@ -56,9 +56,6 @@ final class DoorFeed {
     private final java.util.HashMap<Integer, Long> lastCanMs = new java.util.HashMap<>();
     /** An unchanged message is still written this often (to show the feed is alive). */
     private static final long CAN_REPEAT_MS = 60000;
-    /** Fields that change all the time: written with the rest, but never a reason for a new line. */
-    private static final java.util.Set<String> NOISY_FIELDS =
-        new java.util.HashSet<>(java.util.Arrays.asList("curentergyval"));
 
     private static final String TAG = "rubanled";
     private static final String DESCRIPTOR = "com.mcu.iinterface.aidl.IMcuService";
@@ -237,21 +234,23 @@ final class DoorFeed {
         });
     }
 
-    /** Every message, all its fields: changes always, the same again only once a minute. */
+    /**
+     * Every message, all its fields: changes always, the same again only once a minute. Speed
+     * (code 10, every ~70 ms) only when it crosses what the stop rule looks at: 0, STOP_ARM_KMH,
+     * MANOEUVRE_ARM_KMH (24 Nov: every speed message made 15 500 of the journal's 22 800 lines).
+     */
     private void journalCan(int code, Bundle b) {
         boolean rules = code == CODE_DOORS || code == CODE_LIGHTS || code == CODE_BATTERY;
         if (!rules && !journal.full()) return;            // code 10 (speed) and extra codes: full journal only
         StringBuilder s = new StringBuilder();
-        StringBuilder same = new StringBuilder();       // what must change for a new line
         java.util.TreeSet<String> keys = new java.util.TreeSet<>(b.keySet());
-        for (String k : keys) {
-            s.append(k).append('=').append(b.get(k)).append(' ');
-            // the instant power changes in every speed message (every ~70 ms): 15 500 of the
-            // 22 800 lines of the 24 Nov journal. It is written, but alone it starts no new line.
-            if (!NOISY_FIELDS.contains(k)) same.append(k).append('=').append(b.get(k)).append(' ');
-        }
+        for (String k : keys) s.append(k).append('=').append(b.get(k)).append(' ');
         String line = s.toString().trim();
-        String key = same.toString();
+        String key = line;
+        if (code == CODE_SPEED && b.containsKey("carspeed")) {
+            int v = num(b, "carspeed", -1);
+            key = "vitesse " + (v <= 0 ? "0" : v < STOP_ARM_KMH ? "<arm" : v < MANOEUVRE_ARM_KMH ? "<manoeuvre" : "haute");
+        }
         long now = android.os.SystemClock.elapsedRealtime();
         Long last = lastCanMs.get(code);
         if (key.equals(lastCan.get(code)) && last != null && now - last < CAN_REPEAT_MS) return;
