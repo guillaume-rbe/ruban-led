@@ -52,6 +52,11 @@ public final class MainActivity extends Activity {
     /** Journal card (0.20): certificate state, upload steps and progress. */
     private TextView journalState, journalSteps;
     private ProgressBar journalBar;
+    /** Animations card (0.28): the file in place, the update's steps and progress. */
+    private TextView animState, animSteps;
+    private ProgressBar animBar;
+    private Button animUpdate, animReset;
+    private boolean animBusy;
     private Button send24, sendAll;
     private static boolean askedBattery;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
@@ -170,9 +175,6 @@ public final class MainActivity extends Activity {
             s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } }));
         bind("reverseWhite", toggle(rules, "Blanc en marche arrière", "Un blanc qui respire, un peu plus fort que la couleur permanente, le temps de la marche arrière",
             s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } }));
-        bind("unitQuiet", toggle(rules, "Écran : position activée (plus d'alerte Google)",
-            "Position en mode « appareil seul » (GPS, sans scans Wi-Fi ni réseau Google ; pas de module branché, donc rien ne tourne) : la fenêtre « accès à la position désactivé » de Google ne s'affiche plus au démarrage. Désactiver remet le mode d'avant.",
-            s.unitQuiet, new Toggle() { public void set(Settings x, boolean v) { x.unitQuiet = v; } }));
         // one option for every opening (owner, 23 Nov: doors and boot/frunk were two switches)
         bind("doorBlink", toggle(rules, "Alerte à l'ouverture",
             "Le ruban clignote dans la couleur d'alerte quand une portière, le coffre ou le frunk s'ouvre",
@@ -327,6 +329,46 @@ public final class MainActivity extends Activity {
         updateText.setPadding(0, dp(8), 0, 0);
         strip.addView(updateText);
 
+        // ---- animations (0.28): only the animations file, from GitHub, without a new APK
+        LinearLayout anim = card(right, "Animations");
+        animState = text("", 13, MUTED, false);
+        anim.addView(animState);
+        LinearLayout ar = new LinearLayout(this);
+        animUpdate = pill("Mise à jour des animations", true);
+        animUpdate.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { updateAnimations(); }
+        });
+        animReset = pill("Animations d'origine", false);
+        animReset.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                Animations.reset(MainActivity.this);
+                animSteps.setText("✓ Animations d'origine remises (celles intégrées à l'app)");
+                animSteps.setVisibility(View.VISIBLE);
+                animBar.setVisibility(View.GONE);
+                refreshAnimations();
+            }
+        });
+        ar.setBaselineAligned(false);
+        ar.addView(animUpdate, weight(1.6f, dp(8)));
+        ar.addView(animReset, weight(1, 0));
+        LinearLayout.LayoutParams arp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        arp.topMargin = dp(8);
+        anim.addView(ar, arp);
+        animBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        animBar.setMax(100);
+        animBar.setVisibility(View.GONE);
+        LinearLayout.LayoutParams abp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(14));
+        abp.topMargin = dp(10);
+        anim.addView(animBar, abp);
+        animSteps = text("", 14, TEXT, false);
+        animSteps.setTypeface(Typeface.MONOSPACE);
+        animSteps.setVisibility(View.GONE);
+        anim.addView(animSteps);
+        anim.addView(text("Ne télécharge que le fichier des animations (" + Updater.ANIM_PATH + " sur GitHub), sans réinstaller l'app. "
+            + "Il se prépare avec le simulateur du dépôt (dossier simulateur).", 13, MUTED, false));
+        refreshAnimations();
+
         LinearLayout log = card(left, "Derniers événements");
         eventsLine = text("", 14, MUTED, false);
         eventsLine.setTypeface(Typeface.MONOSPACE);
@@ -403,6 +445,45 @@ public final class MainActivity extends Activity {
             main.postDelayed(this, Journal.sending ? 250 : 1000);
         }
     };
+
+    // ---- animations (0.28)
+
+    private void updateAnimations() {
+        if (animBusy) return;
+        animBusy = true;
+        animUpdate.setEnabled(false);
+        animReset.setEnabled(false);
+        animUpdate.setAlpha(0.5f);
+        animReset.setAlpha(0.5f);
+        new Updater(this, new Updater.Listener() {
+            @Override public void onUpdateStatus(String text) { }
+        }).runAnimations(new Updater.AnimListener() {
+            @Override public void onAnimSteps(String steps, int percent, boolean done) {
+                animSteps.setVisibility(steps.isEmpty() ? View.GONE : View.VISIBLE);
+                animSteps.setText(steps);
+                animBar.setVisibility(percent == -1 || done ? View.GONE : View.VISIBLE);
+                animBar.setIndeterminate(percent == -2);
+                if (percent >= 0) animBar.setProgress(percent);
+                if (done) {
+                    animBusy = false;
+                    animUpdate.setEnabled(true);
+                    animReset.setEnabled(true);
+                    animUpdate.setAlpha(1f);
+                    animReset.setAlpha(1f);
+                    refreshAnimations();
+                }
+            }
+        });
+    }
+
+    private void refreshAnimations() {
+        Animations a = Animations.get(this);
+        StringBuilder names = new StringBuilder();
+        for (int k = 0; k < a.count(); k++) names.append(k == 0 ? "" : ", ").append(a.name(k));
+        animState.setText("En place : " + a.summary() + "\nÀ l'arrêt : " + names);
+        boolean file = !Animations.installedSha(this).isEmpty();
+        animReset.setVisibility(file ? View.VISIBLE : View.GONE);
+    }
 
     // ---- journal (0.20)
 

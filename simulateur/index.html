@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruban LED — animations</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #050608; color: #d8dce4; font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; }
+  canvas { width: min(1100px, 100%); aspect-ratio: 1100 / 520; display: block; margin-top: 12px; }
+  #name { height: 22px; margin: 4px 0 18px; color: #8b93a3; letter-spacing: .04em; font-size: 13px; }
+  .bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 1000px; padding: 0 16px; }
+  button { background: #12151b; color: #d8dce4; border: 1px solid #222833; border-radius: 999px; padding: 8px 16px; font: inherit; cursor: pointer; transition: .15s; }
+  button:hover { border-color: #3a4352; background: #181c24; }
+  button.on { background: #e8ecf3; color: #0a0c10; border-color: #e8ecf3; }
+  .sep { width: 100%; height: 0; }
+  .colour { display: flex; align-items: center; gap: 10px; margin: 22px 0 30px; color: #6c7484; font-size: 13px; }
+  input[type=color] { width: 34px; height: 34px; border: none; border-radius: 50%; padding: 0; background: none; cursor: pointer; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 2px solid #2a303b; border-radius: 50%; }
+  #toggle { background: none; border: none; color: #6c7484; font-size: 13px; margin-bottom: 10px; }
+  #toggle:hover { color: #d8dce4; }
+  #panel { display: none; width: min(640px, 92%); background: #0b0d11; border: 1px solid #1c212a; border-radius: 14px; padding: 16px 18px; margin-bottom: 40px; }
+  #panel.open { display: block; }
+  #panel h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #aab2c0; }
+  #panel label { display: grid; grid-template-columns: 210px 1fr 48px; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; color: #8b93a3; }
+  #panel output { text-align: right; color: #d8dce4; font-variant-numeric: tabular-nums; }
+  #panel .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  #panel input[type=text], #panel input[type=number] { background: #12151b; color: #d8dce4; border: 1px solid #222833; border-radius: 8px; padding: 7px 9px; font: inherit; }
+  #panel hr { border: none; border-top: 1px solid #1c212a; margin: 16px 0; }
+  #note { color: #8b93a3; font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .file { position: relative; overflow: hidden; }
+  .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="view" width="1100" height="520"></canvas>
+<div id="name">Couleur permanente</div>
+
+<div class="bar" id="bar"></div>
+<div class="colour">Couleur permanente <input type="color" id="col" value="#14a5ff"></div>
+<button id="toggle">Réglages des animations d'arrêt ▾</button>
+<div id="panel">
+  <h3 id="ptitle"></h3>
+  <div id="params"></div>
+  <hr>
+  <h3>Nouvelle animation enregistrée</h3>
+  <div class="row"><input type="text" id="rname" placeholder="Nom" style="flex:1">
+    <span style="color:#6c7484;font-size:13px">boucle de</span><input type="number" id="rdur" value="3" min="0.2" max="60" step="0.1" style="width:70px"><span style="color:#6c7484;font-size:13px">s</span></div>
+  <div class="row"><input type="text" id="rcode" style="flex:1;font-family:ui-monospace,Consolas,monospace"
+    value="Math.exp(-(((x - (0.5 + 0.5 * Math.sin(2 * Math.PI * t / 3))) / 0.06) ** 2))"></div>
+  <div style="color:#6c7484;font-size:12px;margin-top:6px">Niveau de 0 à 1 de chaque segment du tableau de bord : x de 0 (bout droit) à 1 (bout gauche), t en secondes, i de 0 à 14.</div>
+  <div class="row"><button id="record">Enregistrer l'animation</button></div>
+  <hr>
+  <div class="row"><button id="export" class="on">Exporter animations.json</button>
+    <button class="file">Ouvrir un fichier…<input type="file" id="open" accept=".json,application/json"></button></div>
+  <div id="note"></div>
+</div>
+
+<script>
+"use strict";
+/* Mêmes calculs et mêmes délais que l'app (LedService.java, HoldShow.java). */
+const SEG = 20, VIS = 15, DOOR = 10, REPEATS = 3;
+const FADE = 0.12, ROUND_GAP = 600;
+let hue = 200, sat = 92;             // couleur permanente
+const PCT = 100, ALERT = [0, 100];   // luminosité, couleur d'alerte (rouge)
+
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const sq = v => v * v;
+const mod360 = h => ((Math.round(h) % 360) + 360) % 360;
+const solid = (h, s, v) => ({ h: Array(SEG).fill(h), s: Array(SEG).fill(s), v: Array(SEG).fill(Math.round(v)) });
+const levels = (h, s, vals) => ({ h: Array(SEG).fill(h), s: Array(SEG).fill(s), v: vals.map(Math.round) });
+const introStart = i => i < DOOR ? i / DOOR : (VIS - 1 - i) / (VIS - DOOR);
+
+/* ---------- animations : une image, puis le délai avant la suivante ---------- */
+function* intro() {
+  for (let r = 0; r < REPEATS; r++) {
+    if (r) yield [null, ROUND_GAP];
+    for (let f = 0; f < 28; f++) {
+      const t = f * (0.9 + FADE) / 27, vals = [];
+      for (let i = 0; i < SEG; i++) {
+        if (i >= VIS) { vals[i] = PCT; continue; }
+        const k = (t - introStart(i)) / FADE;
+        vals[i] = k <= 0 ? 0 : k >= 1 ? PCT : PCT * k;
+      }
+      yield [levels(hue, sat, vals), 170];
+    }
+  }
+}
+function* exit() {
+  for (let r = 0; r < REPEATS; r++) {
+    if (r) yield [levels(hue, sat, Array(SEG).fill(0)), ROUND_GAP];
+    const band = r > 0, frames = band ? 28 : 22, bw = band ? 0.25 : 0;
+    for (let f = 0; f < frames; f++) {
+      const t = f * (0.9 + FADE + bw) / (frames - 1), vals = [];
+      for (let i = 0; i < SEG; i++) {
+        if (band && i >= VIS) { vals[i] = 0; continue; }
+        const start = i < VIS ? 0.9 - introStart(i) : 0;
+        const off = clamp01((t - start - bw) / FADE), on = band ? clamp01((t - start) / FADE) : 1;
+        vals[i] = PCT * Math.max(0, on - off);
+      }
+      yield [levels(hue, sat, vals), 150];
+    }
+  }
+  yield [solid(0, 0, 0), 0];
+}
+function* blink() {
+  for (let n = 0, on = false; n < 15; n++) { on = !on; yield [solid(ALERT[0], ALERT[1], on ? PCT : 1), 400]; }
+}
+function* reverse() {
+  const white = Math.min(100, Math.max(PCT + 30, Math.round(PCT * 1.5)));
+  for (let f = 0; f < 84; f++) {
+    const t = (f * 120 % 2000) / 2000, level = 0.15 + 0.85 * (0.5 + 0.5 * Math.cos(2 * Math.PI * t));
+    yield [solid(0, 0, Math.max(1, white * level)), 120];
+  }
+}
+function* autosteer() { yield [solid(212, 88, PCT), 1000]; }
+function* gauge() {
+  const soc = 62, bar = Math.max(1, Math.round(soc * VIS / 100));
+  const right = Math.floor((VIS - bar) / 2), left = VIS - bar - right;
+  for (let g = 0; g < 29 * 3; g++) {
+    const fr = g % 29, t = fr >= 26 ? -1 : Math.min(fr, 21) * (1 + FADE) / 21, vals = [];
+    for (let i = 0; i < SEG; i++) {
+      let k, n;
+      if (i >= VIS) { vals[i] = PCT; continue; }
+      if (i < right) { k = i; n = right; } else if (i >= VIS - left) { k = VIS - 1 - i; n = left; } else { vals[i] = PCT; continue; }
+      const q = (t - k / n) / FADE;
+      vals[i] = q <= 0 ? 0 : q >= 1 ? PCT : PCT * q;
+    }
+    yield [levels(120, 100, vals), 170];
+  }
+}
+
+/* ---------- le fichier des animations (animations/animations.json, lu par l'app depuis la 0.28) ---------- */
+// mêmes valeurs que le fichier du dépôt ; remplacées par lui s'il est servi à côté (voir README)
+let A = {
+  format: 1, version: 1, date: "2026-11-25",
+  description: "Fond éteint pour Croisement, Du centre vers les bouts et Scintillement ; Respiration lente jusqu'à 5 %",
+  image_ms: 150,
+  respiration: { min: 5, souffle_s: 5 },
+  croisement: { fond: 0, traine: 0.07, trajet_s: 3.2, pause_s: 0.6 },
+  centre: { fond: 0, traine: 0.07, trajet_s: 1.8, pause_s: 0.6 },
+  scintillement: { fond: 0, chance: 3, descente: 0.7 },
+  vague: { ecart: 50, periode_s: 4 },
+  enregistrees: [],
+};
+
+/* Animations à l'arrêt (HoldShow), avec le fondu d'entrée (6 images) et de sortie (3 images). */
+function phase(t, move, pause) { return Math.min(1, (t % (move + pause)) / move); }
+function comet(x, p, dir, tail) { const d = (p - x) * dir; return d < 0 ? Math.exp(-sq(d / 0.05)) : Math.exp(-d / tail); }
+function* hold(kind) {
+  const spark = Array(VIS).fill(0), rising = Array(VIS).fill(false);
+  const H = Array(SEG).fill(0), S = Array(SEG).fill(0), V = Array(SEG).fill(0);
+  const rec = kind >= 5 ? A.enregistrees[kind - 5] : null;
+  const ms = rec ? (rec.image_ms || A.image_ms) : A.image_ms;
+  const FRAMES = Math.round(10000 / ms);     // 10 s, comme le test de l'app
+  let w0 = 0;
+  for (let f = 0; ; f++) {
+    if (f >= FRAMES) { w0 -= 1 / 3; if (w0 <= 0) return; } else w0 = Math.min(1, w0 + 1 / 6);
+    const t = f * ms / 1000, r = A.respiration, c = A.croisement, m = A.centre, k = A.scintillement, v = A.vague;
+    for (let i = 0; i < VIS; i++) {
+      const x = i / (VIS - 1);
+      let level, h = hue, s = sat;
+      if (rec) level = rec.images[f % rec.images.length][i] / 100;
+      else if (kind === 0) { const lo = r.min / 100; level = lo + (1 - lo) * (0.5 + 0.5 * Math.cos(2 * Math.PI * t / r.souffle_s)); }
+      else if (kind === 1) { const p = phase(t, c.trajet_s, c.pause_s) * 1.4 - 0.2;
+        level = Math.max(c.fond / 100, Math.min(1, comet(x, p, 1, c.traine) + comet(x, 1 - p, -1, c.traine))); }
+      else if (kind === 2) { const ph = phase(t, m.trajet_s, m.pause_s), rr = ph * 0.7, glow = Math.exp(-ph * 6) * Math.exp(-sq((x - 0.5) / 0.08));
+        level = Math.max(m.fond / 100, Math.min(1, comet(x, 0.5 + rr, 1, m.traine) + comet(x, 0.5 - rr, -1, m.traine) + glow)); }
+      else if (kind === 3) {
+        if (i === 0) for (let j = 0; j < VIS; j++) {
+          if (rising[j]) { spark[j] = Math.min(1, spark[j] + 0.5); if (spark[j] >= 1) rising[j] = false; }
+          else { spark[j] *= k.descente; if (spark[j] < 0.05 && Math.random() < k.chance / 100) rising[j] = true; }
+        }
+        const bg = k.fond / 100;
+        level = spark[i] < 0.1 ? bg : bg + (1 - bg) * spark[i];
+      } else { h = hue + Math.round(v.ecart * Math.sin(2 * Math.PI * (x - t / v.periode_s))); s = Math.max(sat, 70); level = 1; }
+      H[i] = mod360(h); S[i] = s; V[i] = Math.round(PCT * level);
+    }
+    const w = w0 * w0 * (3 - 2 * w0);
+    for (let i = SEG - 1; i >= 0; i--) {
+      const j = Math.min(i, VIS - 1), dh = ((H[j] - hue + 540) % 360) - 180;
+      H[i] = mod360(hue + w * dh); S[i] = Math.round(sat + w * (S[j] - sat)); V[i] = Math.round(PCT + w * (V[j] - PCT));
+    }
+    yield [{ h: H.slice(), s: S.slice(), v: V.slice() }, ms];
+  }
+}
+
+const HOLD_NAMES = ["Respiration lente", "Croisement", "Du centre vers les bouts", "Scintillement", "Vague de couleur"];
+const BASE = [["Allumage", intro], ["Extinction", exit], ["Alerte porte", blink], ["Marche arrière", reverse],
+  ["Autosteer", autosteer], ["Recharge", gauge]];
+
+/* ---------- lecture ---------- */
+let px = solid(hue, sat, PCT), it = null, timer = null, curBtn = null;
+function play(name, gen, btn) {
+  clearTimeout(timer); it = gen(); setOn(btn); document.getElementById("name").textContent = name; step();
+}
+function step() {
+  const r = it.next();
+  if (r.done) { it = null; setOn(null); steady(); return; }
+  if (r.value[0]) px = r.value[0];
+  timer = setTimeout(step, r.value[1]);
+}
+function steady() { if (!it) { px = solid(hue, sat, PCT); document.getElementById("name").textContent = "Couleur permanente"; } }
+function setOn(b) { if (curBtn) curBtn.classList.remove("on"); curBtn = b; if (b) b.classList.add("on"); }
+
+const bar = document.getElementById("bar");
+let selHold = 0;
+function buildButtons() {
+  bar.innerHTML = "";
+  const add = (name, gen, onPick) => { const b = document.createElement("button"); b.textContent = name;
+    b.onclick = () => { if (onPick) onPick(); play(name, gen, b); }; bar.appendChild(b); };
+  for (const [n, g] of BASE) add(n, g);
+  const d = document.createElement("div"); d.className = "sep"; bar.appendChild(d);
+  HOLD_NAMES.concat(A.enregistrees.map(r => r.nom)).forEach((n, k) => add(n, () => hold(k), () => { selHold = k; showParams(); }));
+}
+
+/* ---------- réglages et export du fichier ---------- */
+const PARAMS = [   // [bloc, clé, libellé, min, max, pas]
+  [["respiration", "min", "Minimum (%)", 0, 100, 1], ["respiration", "souffle_s", "Durée d'un souffle (s)", 0.5, 20, 0.1]],
+  [["croisement", "fond", "Fond (%)", 0, 100, 1], ["croisement", "traine", "Traîne", 0.01, 0.5, 0.01],
+   ["croisement", "trajet_s", "Trajet (s)", 0.3, 10, 0.1], ["croisement", "pause_s", "Pause (s)", 0, 5, 0.1]],
+  [["centre", "fond", "Fond (%)", 0, 100, 1], ["centre", "traine", "Traîne", 0.01, 0.5, 0.01],
+   ["centre", "trajet_s", "Trajet (s)", 0.3, 10, 0.1], ["centre", "pause_s", "Pause (s)", 0, 5, 0.1]],
+  [["scintillement", "fond", "Fond (%)", 0, 100, 1], ["scintillement", "chance", "Chance d'allumage par image (%)", 0, 30, 0.5],
+   ["scintillement", "descente", "Descente par image (×)", 0.3, 0.95, 0.01]],
+  [["vague", "ecart", "Écart de teinte (°)", 0, 180, 1], ["vague", "periode_s", "Période (s)", 0.5, 20, 0.1]],
+];
+function showParams() {
+  const box = document.getElementById("params"), title = document.getElementById("ptitle");
+  box.innerHTML = "";
+  if (selHold >= 5) { title.textContent = "« " + A.enregistrees[selHold - 5].nom + " » : animation enregistrée (" + A.enregistrees[selHold - 5].images.length + " images)"; return; }
+  title.textContent = HOLD_NAMES[selHold];
+  for (const [blk, key, label, lo, hi, st] of PARAMS[selHold]) {
+    const row = document.createElement("label"), out = document.createElement("output"), inp = document.createElement("input");
+    inp.type = "range"; inp.min = lo; inp.max = hi; inp.step = st; inp.value = A[blk][key]; out.textContent = A[blk][key];
+    inp.oninput = () => { A[blk][key] = +inp.value; out.textContent = inp.value; };
+    inp.onchange = () => { const b = curBtn; if (b) b.click(); };
+    row.append(label, inp, out); box.appendChild(row);
+  }
+}
+function loadFile(o, from) {
+  if (!o || o.format !== 1) { note("Fichier refusé : « format » doit valoir 1"); return; }
+  const def = A;
+  for (const k of ["respiration", "croisement", "centre", "scintillement", "vague"]) o[k] = Object.assign({}, def[k], o[k] || {});
+  o.image_ms = o.image_ms || 150; o.enregistrees = o.enregistrees || [];
+  A = o; buildButtons(); showParams();
+  note("Chargé " + from + " : version " + A.version + (A.date ? " du " + A.date : ""));
+}
+function note(t) { document.getElementById("note").textContent = t; }
+function exportFile() {
+  const o = JSON.parse(JSON.stringify(A));
+  o.version = (+o.version || 0) + 1;
+  o.date = new Date().toISOString().slice(0, 10);
+  o.description = prompt("Ce qui change dans cette version (affiché dans l'app) :", "") ?? o.description;
+  const json = JSON.stringify(o, null, 2).replace(/\[\n\s+((?:\d+,\s*)*\d+)\n\s+\]/g, (m, inner) => "[" + inner.replace(/\s+/g, " ") + "]");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([json + "\n"], { type: "application/json" }));
+  a.download = "animations.json"; a.click();
+  A.version = o.version; A.date = o.date; A.description = o.description;
+  note("Exporté : version " + o.version + ". Remplacer animations/animations.json du dépôt par ce fichier, puis le pousser sur GitHub.");
+}
+function recordNew() {
+  const name = document.getElementById("rname").value.trim(), code = document.getElementById("rcode").value;
+  const dur = +document.getElementById("rdur").value, ms = A.image_ms;
+  if (!name) return note("Donner un nom à l'animation");
+  let fn;
+  try { fn = new Function("x", "t", "i", "return (" + code + ");"); fn(0, 0, 0); } catch (e) { return note("Formule invalide : " + e.message); }
+  const n = Math.max(1, Math.round(dur * 1000 / ms)), images = [];
+  for (let f = 0; f < n; f++) {
+    const row = [];
+    for (let i = 0; i < VIS; i++) row.push(Math.max(0, Math.min(100, Math.round(100 * (+fn(i / (VIS - 1), f * ms / 1000, i) || 0)))));
+    images.push(row);
+  }
+  const old = A.enregistrees.findIndex(r => r.nom === name);
+  if (old >= 0) A.enregistrees[old] = { nom: name, image_ms: ms, images }; else A.enregistrees.push({ nom: name, image_ms: ms, images });
+  buildButtons(); selHold = 5 + (old >= 0 ? old : A.enregistrees.length - 1); showParams();
+  note("« " + name + " » enregistrée : " + n + " images de " + ms + " ms, jouées en boucle à l'arrêt");
+}
+document.getElementById("toggle").onclick = () => document.getElementById("panel").classList.toggle("open");
+document.getElementById("export").onclick = exportFile;
+document.getElementById("open").onchange = e => { const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => { try { loadFile(JSON.parse(t), "depuis " + f.name); } catch (err) { note("Fichier illisible : " + err.message); } }); };
+document.getElementById("record").onclick = recordNew;
+buildButtons(); showParams();
+fetch("../animations/animations.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null)
+  .then(o => { if (o) loadFile(o, "depuis le dépôt"); }).catch(() => {});
+
+document.getElementById("col").oninput = e => {
+  const n = parseInt(e.target.value.slice(1), 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d) h = mx === r ? 60 * (((g - b) / d) % 6) : mx === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+  hue = mod360(h); sat = mx ? Math.round(100 * d / mx) : 0; steady();
+};
+
+/* ---------- rendu : trois rubans lumineux ---------- */
+const cv = document.getElementById("view"), ctx = cv.getContext("2d"), W = cv.width;
+// tableau de bord : segment 1 au bout droit, 15 au bout gauche ; portes : segment 1 à l'arrière (en bas)
+const DASH = { a: [250, 150], c: [550, 110], b: [850, 150], n: VIS, seg: k => VIS - 1 - k };
+const DOORL = { a: [90, 470], c: [150, 330], b: [230, 230], n: DOOR, seg: k => k };
+const DOORR = { a: [W - 90, 470], c: [W - 150, 330], b: [W - 230, 230], n: DOOR, seg: k => k };
+const LEDS = 6;
+const qpt = (p, t) => [0, 1].map(k => (1 - t) * (1 - t) * p.a[k] + 2 * (1 - t) * t * p.c[k] + t * t * p.b[k]);
+function rgb(h, s, v) {
+  s /= 100; v = Math.pow(v / 100, 1 / 2.2);         // la luminosité telle que l'œil la voit
+  const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+function strip(p) {
+  const n = p.n * LEDS;
+  ctx.lineCap = "round"; ctx.lineWidth = 14; ctx.strokeStyle = "#0e1014";
+  ctx.beginPath(); for (let k = 0; k <= 30; k++) ctx.lineTo(...qpt(p, k / 30)); ctx.stroke();
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < n; k++) {
+      const s = p.seg(Math.floor(k / LEDS)), v = px.v[s];
+      if (v <= 0) continue;
+      const [r, g, b] = rgb(px.h[s], px.s[s], v), q = qpt(p, (k + 0.5) / n);
+      if (pass === 0) {           // halo
+        const R = 30, gr = ctx.createRadialGradient(q[0], q[1], 0, q[0], q[1], R);
+        gr.addColorStop(0, `rgba(${r|0},${g|0},${b|0},.22)`); gr.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = gr; ctx.fillRect(q[0] - R, q[1] - R, 2 * R, 2 * R);
+      } else {                    // le ruban
+        ctx.fillStyle = `rgb(${Math.min(255, r + 40)|0},${Math.min(255, g + 40)|0},${Math.min(255, b + 40)|0})`;
+        ctx.beginPath(); ctx.arc(q[0], q[1], 4, 0, 7); ctx.fill();
+      }
+    }
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+(function render() {
+  ctx.clearRect(0, 0, W, cv.height);
+  strip(DASH); strip(DOORL); strip(DOORR);
+  requestAnimationFrame(render);
+})();
+</script>
+</body>
+</html>

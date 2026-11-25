@@ -2,6 +2,13 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.28
+
+- **Mise à jour des animations sans réinstaller l'app** : carte « Animations », bouton « Mise à jour des animations ». Il ne télécharge que le fichier des animations (`animations/animations.json` sur GitHub) et montre chaque étape : recherche, téléchargement avec sa barre, vérification, mise en place. La carte dit quelle version est en place ; « Animations d'origine » revient à celles de l'app. Le fichier règle les animations à l'arrêt et peut en ajouter de nouvelles.
+- **Animations à l'arrêt plus lisibles** : Croisement, Du centre vers les bouts et Scintillement sur fond éteint (seules les lumières qui bougent sont allumées, avec une traîne plus courte et moins d'étoiles à la fois) ; Respiration lente descend à 5 % au lieu de 20 %.
+- **Simulateur** (dossier `simulateur` du dépôt) : une page web qui joue toutes les animations de l'app sur les trois rubans, avec les mêmes délais et couleurs, et prépare le fichier des animations.
+- Le réglage « Écran : position activée » n'est plus affiché (il reste actif) ; ses relevés vont dans le journal au lieu de « Derniers événements ».
+
 ## 0.27
 
 - **Vitesse presque plus journalisée** : elle ne sert qu'à reconnaître l'arrêt en D, déjà noté à part (« arrêt en D après avoir roulé », « repart »). Le journal détaillé ne l'écrit plus qu'au passage des seuils de cette règle (0, 1 et 15 km/h), et une fois par minute sinon. Le journal du 24 nov. passerait d'environ 22 800 à environ 1 800 lignes.

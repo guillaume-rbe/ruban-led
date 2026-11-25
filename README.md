@@ -34,7 +34,9 @@ Derniers événements, adresse du ruban et mise à jour :
 Documentation :
 - [docs/DONNEES-CAN.md](docs/DONNEES-CAN.md) : les champs lus, le relevé du verrouillage, ce qui
   n'est pas dans le flux (Auto Hold, limiteur) ;
-- [PROTOCOLE.md](PROTOCOLE.md) : le protocole Bluetooth du ruban Zengge.
+- [PROTOCOLE.md](PROTOCOLE.md) : le protocole Bluetooth du ruban Zengge ;
+- [simulateur/](simulateur/README.md) : une page web qui joue les animations de l'app sur trois
+  rubans (tableau de bord et portières), et prépare le fichier des animations à l'arrêt.
 
 ## Ce qu'elle fait
 
@@ -86,10 +88,12 @@ Documentation :
   arrière (manœuvres), un arrêt ne compte qu'une fois repartie au-dessus de 15 km/h. Alors, une
   fois sur 4 au hasard (réglable : « Arrêt : 1 sur »), une animation tirée au hasard (jamais deux
   fois la même de suite) dans la couleur permanente, dessinée pour le tableau de bord, jusqu'au
-  départ : **respiration lente** (5 s par souffle), **croisement** (une lumière part de chaque bout,
-  elles se croisent au milieu et continuent jusqu'à l'autre bout, ~4 s), **du centre vers les
-  bouts** (~2,4 s), **scintillement** (des points s'allument au hasard sur un fond doux),
-  **vague de couleur** (la teinte ondule de ±50° autour de la couleur permanente et défile, ~4 s).
+  départ : **respiration lente** (5 s par souffle, de 100 % à 5 %), **croisement** (une lumière
+  part de chaque bout, elles se croisent au milieu et continuent jusqu'à l'autre bout, ~4 s),
+  **du centre vers les bouts** (~2,4 s), **scintillement** (des points s'allument au hasard),
+  **vague de couleur** (la teinte ondule de ±50° autour de la couleur permanente et défile, ~4 s),
+  et les animations enregistrées du fichier des animations. Croisement, centre et scintillement
+  sur fond éteint : seules les lumières qui bougent sont allumées (0.28).
   Elle arrive en fondu (~1 s) et repart en fondu court (~0,5 s) dès que la voiture repart.
   Les portes montrent les segments 1 à 10 (même signal) : elles suivent les deux tiers droits du
   tableau de bord. Rien si la voiture charge, qu'une autre animation tourne ou qu'une porte s'ouvre
@@ -112,6 +116,26 @@ Documentation :
   couleur permanente, et couleur d'alerte (rouge 100 % par défaut, réservée aux portes, coffre, frunk et warnings).
 - Écran sombre en cartes : état, présence, couleurs, derniers événements (heure de chaque porte,
   connexion du ruban… pour voir d'où vient un retard), actions, règles, ruban et mise à jour.
+
+## Mise à jour des animations (0.28)
+
+Carte « Animations » : **« Mise à jour des animations »** télécharge seulement
+[`animations/animations.json`](animations/animations.json) depuis la branche `main` de ce dépôt,
+sans nouvelle APK. Ce fichier règle les animations à l'arrêt (minimum de la respiration, fond,
+traîne et durées du croisement et du centre, scintillement, vague) et peut en ajouter
+(« animations enregistrées » : des images de 15 niveaux jouées en boucle dans la couleur
+permanente). Il se prépare avec le [simulateur](simulateur/README.md), qui l'exporte.
+
+- Chaque étape s'affiche, ✓ ou ✗ avec la raison : recherche sur GitHub (date et message du dernier
+  commit du fichier), téléchargement avec sa barre (la version exacte de ce commit, jamais une copie
+  en cache), vérification (format, valeurs dans leurs limites, nombre d'images), mise en place.
+  « Déjà à jour » si ce fichier est déjà en place.
+- La carte dit ce qui est en place (« version 2 du … · 5 réglées + 1 enregistrée ») et la liste des
+  animations à l'arrêt. **« Animations d'origine »** revient à celles intégrées à l'app.
+- Un fichier refusé ou abîmé laisse les animations en place. Le fichier est gardé dans le stockage
+  privé de l'app (`files/animations.json`) ; sans lui, les valeurs intégrées (celles du fichier à la
+  0.28).
+- L'allumage, l'extinction, l'alerte, la marche arrière, l'Autosteer et la jauge restent dans l'app.
 
 ## Journaux (0.20)
 
@@ -166,8 +190,7 @@ l'écran (position, journaux, adresse du ruban, mise à jour) n'y sont pas.
 
 ## Réglages de l'écran
 
-Option « Écran : position activée (plus d'alerte Google) » (activée par défaut) : à chaque
-démarrage, l'app lance par l'ADB réseau de l'écran (127.0.0.1:5555, sans authentification sur cet
+Toujours active, sans réglage affiché depuis la 0.28 : à chaque démarrage, l'app lance par l'ADB réseau de l'écran (127.0.0.1:5555, sans authentification sur cet
 écran, comme Binnacle) une liste **fixe** de commandes, jamais une commande venue de l'extérieur :
 
 | Quoi | Commande | Annuler |
@@ -179,8 +202,8 @@ Pourquoi : la fenêtre de Google « L'accès à la position de l'appareil étant
 fournisseur de position n'est actif. L'écran n'a pas de position par le réseau : le mode « réseau
 seul » des versions 0.19 à 0.23 revenait à tout couper (la fenêtre restait). Le mode appareil seul
 garde le GPS comme seul fournisseur, sans scans Wi-Fi ni réseau Google (la précision de la
-localisation Google reste coupée). L'état avant / après et l'écran au premier plan ~45 s après le démarrage sont notés dans
-« Derniers événements » (pour nommer la fenêtre si elle revenait).
+localisation Google reste coupée). L'état avant / après et l'écran au premier plan ~45 s après le
+démarrage sont notés dans le journal (étiquette `ECRAN`), plus dans « Derniers événements ».
 
 ## Priorité et réactivité
 

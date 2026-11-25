@@ -42,12 +42,26 @@ final class Updater {
         void onUpdateStatus(String text);
     }
 
+    /** Animations update (0.28): the steps so far, the download's percent (-1: no bar, -2: size unknown), done. */
+    interface AnimListener {
+        void onAnimSteps(String steps, int percent, boolean done);
+    }
+
+    /** Bytes received so far, and the total (-1 if the server doesn't say). */
+    private interface Progress {
+        void bytes(long done, long total);
+    }
+
     static final String REPO = "guillaume-rbe/ruban-led";
     private static final String RELEASES = "https://api.github.com/repos/" + REPO + "/releases?per_page=30";
     private static final String TAG_PREFIX = "ruban-led-v";
     private static final String APK = "ruban-led.apk";
     private static final String SHA = "ruban-led.apk.sha256";
     private static final String LOG = "rubanled";
+    static final String ANIM_PATH = "animations/animations.json";
+    /** The last commit of main that changed the file: its sha names that exact version of the file. */
+    private static final String ANIM_COMMITS = "https://api.github.com/repos/" + REPO
+        + "/commits?sha=main&per_page=1&path=" + ANIM_PATH;
 
     private final Context ctx;
     private final Listener listener;
@@ -138,6 +152,106 @@ final class Updater {
         status("Version " + bestCode + " prête : confirmer l'installation à l'écran");
     }
 
+    // ---- animations (0.28): only animations/animations.json, no APK
+
+    private final java.util.List<String> animLines = new java.util.ArrayList<>();
+    private AnimListener animListener;
+    /** The step in progress, to name it in an error. */
+    private volatile String animStep = "";
+
+    /** Downloads animations/animations.json from main, checks it and puts it in place. */
+    void runAnimations(AnimListener l) {
+        animListener = l;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    animations();
+                } catch (Throwable t) {
+                    Log.w(LOG, "animations update failed", t);
+                    String msg = String.valueOf(t.getMessage());
+                    setLast("✗ " + animStep + " : " + msg + (viaSystem && !msg.startsWith(NO_NETWORK)
+                        ? " (même via le gestionnaire de téléchargements d'Android)" : "")
+                        + ". Les animations actuelles restent en place.", -1, true);
+                }
+            }
+        }, "animations").start();
+    }
+
+    private void animations() throws Exception {
+        addLine("Recherche sur GitHub", -1);
+        JSONArray commits = new JSONArray(new String(fetch(ANIM_COMMITS, "commits.json", 1 << 20, null), "UTF-8"));
+        if (commits.length() == 0) throw new Exception("pas de fichier " + ANIM_PATH + " sur GitHub");
+        JSONObject last = commits.getJSONObject(0);
+        String sha = last.getString("sha");
+        JSONObject commit = last.optJSONObject("commit");
+        String when = "", what = "";
+        if (commit != null) {
+            JSONObject who = commit.optJSONObject("committer");
+            if (who != null) when = who.optString("date", "").replace('T', ' ').replace("Z", " UTC");
+            what = commit.optString("message", "").split("\n")[0];
+        }
+        setLast("✓ Trouvé : modifié le " + when + (what.isEmpty() ? "" : " (« " + what + " »)"), -1, false);
+        if (sha.equals(Animations.installedSha(ctx))) {
+            addLine("✓ Déjà à jour : ce fichier est déjà en place (" + Animations.get(ctx).summary() + ")", -1);
+            setLast("✓ Déjà à jour : ce fichier est déjà en place (" + Animations.get(ctx).summary() + ")", -1, true);
+            return;
+        }
+        addLine("Téléchargement", 0);
+        // this exact version of the file (by its commit), never a copy cached by GitHub
+        String url = "https://raw.githubusercontent.com/" + REPO + "/" + sha + "/" + ANIM_PATH;
+        byte[] data = fetch(url, "animations.json", Animations.MAX_BYTES, new Progress() {
+            @Override public void bytes(long done, long total) {
+                int pct = total > 0 ? (int) Math.min(100, done * 100 / total) : -2;
+                setLast("…  Téléchargement : " + kb(done) + (total > 0 ? " sur " + kb(total) : ""), pct, false);
+            }
+        });
+        setLast("✓ Reçu : " + kb(data.length), 100, false);
+        addLine("Vérification du fichier", 100);
+        Animations a;
+        try {
+            a = Animations.parse(data);
+        } catch (Exception e) {
+            setLast("✗ Fichier refusé : " + e.getMessage() + ". Les animations actuelles restent en place.", -1, true);
+            return;
+        }
+        StringBuilder names = new StringBuilder();
+        for (Animations.Recorded r : a.recorded) names.append(names.length() == 0 ? " (" : ", ").append(r.name);
+        if (names.length() > 0) names.append(')');
+        setLast("✓ Vérifié : " + a.summary() + names + (a.description.isEmpty() ? "" : " : « " + a.description + " »"), 100, false);
+        addLine("Mise en place", 100);
+        Animations.install(ctx, data, sha);
+        setLast("✓ En place : la prochaine animation d'arrêt l'utilise (« Boutons de test » → « Animations à l'arrêt » pour la voir)", -1, true);
+    }
+
+    private static String kb(long n) {
+        return n < 1024 ? n + " o" : String.format(java.util.Locale.FRANCE, "%.1f Ko", n / 1024.0);
+    }
+
+    /** A step that starts (shown with "…"). */
+    private void addLine(String line, int percent) {
+        boolean result = line.startsWith("✓") || line.startsWith("✗");
+        if (!result) animStep = line;
+        synchronized (animLines) { animLines.add(result ? line : "…  " + line); }
+        sendAnim(percent, false);
+    }
+
+    /** The current step, its result. */
+    private void setLast(String line, int percent, boolean done) {
+        synchronized (animLines) {
+            if (animLines.isEmpty()) animLines.add(line); else animLines.set(animLines.size() - 1, line);
+        }
+        sendAnim(percent, done);
+    }
+
+
+    private void sendAnim(final int percent, final boolean done) {
+        final String text;
+        synchronized (animLines) { text = android.text.TextUtils.join("\n", animLines); }
+        main.post(new Runnable() {
+            @Override public void run() { if (animListener != null) animListener.onAnimSteps(text, percent, done); }
+        });
+    }
+
     private void install(byte[] apk) throws Exception {
         PackageInstaller pi = ctx.getPackageManager().getPackageInstaller();
         PackageInstaller.SessionParams params =
@@ -174,9 +288,13 @@ final class Updater {
 
     /** The app's own connection first; Android's DownloadManager if the socket is refused. */
     private byte[] fetch(String url, String name, int max) throws Exception {
+        return fetch(url, name, max, null);
+    }
+
+    private byte[] fetch(String url, String name, int max, Progress progress) throws Exception {
         if (!viaSystem) {
             try {
-                return get(url, max);
+                return get(url, max, progress);
             } catch (java.net.SocketException | java.net.UnknownHostException | SecurityException e) {
                 // also what no network looks like: Android's downloader then gives up quickly
                 // (it reports it waits for a network, or nothing arrives), see viaDownloadManager
@@ -187,10 +305,10 @@ final class Updater {
                 status("Téléchargement…");
             }
         }
-        return viaDownloadManager(url, name, max);
+        return viaDownloadManager(url, name, max, progress);
     }
 
-    private byte[] viaDownloadManager(String url, String name, int max) throws Exception {
+    private byte[] viaDownloadManager(String url, String name, int max, Progress progress) throws Exception {
         DownloadManager dm = (DownloadManager) ctx.getSystemService(Context.DOWNLOAD_SERVICE);
         File dir = ctx.getExternalFilesDir("update");
         if (dm == null || dir == null) throw new Exception("gestionnaire de téléchargements indisponible");
@@ -209,18 +327,23 @@ final class Updater {
             while (true) {
                 Cursor c = dm.query(new DownloadManager.Query().setFilterById(id));
                 int st = -1, reason = 0;
-                long bytes = 0;
+                long bytes = 0, total = -1;
                 try {
                     if (c != null && c.moveToFirst()) {
                         st = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_STATUS));
                         reason = c.getInt(c.getColumnIndex(DownloadManager.COLUMN_REASON));
                         bytes = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                        total = c.getLong(c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
                     }
                 } finally {
                     if (c != null) c.close();
                 }
                 now = System.currentTimeMillis();
-                if (bytes != lastBytes) { lastBytes = bytes; lastProgress = now; }
+                if (bytes != lastBytes) {
+                    lastBytes = bytes;
+                    lastProgress = now;
+                    if (progress != null) progress.bytes(bytes, total);
+                }
                 if (st == DownloadManager.STATUS_SUCCESSFUL) break;
                 if (st == DownloadManager.STATUS_FAILED || st == -1) throw new Exception("téléchargement Android en échec (" + reason + ")");
                 // without a network Android just waits for one (paused, or pending): give up
@@ -249,7 +372,7 @@ final class Updater {
         }
     }
 
-    private static byte[] get(String url, int max) throws Exception {
+    private static byte[] get(String url, int max, Progress progress) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(15000);
         c.setReadTimeout(30000);
@@ -258,14 +381,19 @@ final class Updater {
         c.setInstanceFollowRedirects(true);
         int code = c.getResponseCode();
         if (code != 200) throw new Exception("HTTP " + code);
+        long total = c.getContentLengthLong();
         InputStream in = c.getInputStream();
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
         byte[] b = new byte[16384];
         int n;
+        long shown = 0;
         while ((n = in.read(b)) > 0) {
             buf.write(b, 0, n);
             if (buf.size() > max) throw new Exception("fichier trop gros");
+            long now = System.currentTimeMillis();
+            if (progress != null && now - shown > 100) { shown = now; progress.bytes(buf.size(), total); }
         }
+        if (progress != null) progress.bytes(buf.size(), total);
         in.close();
         return buf.toByteArray();
     }

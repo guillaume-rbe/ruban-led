@@ -411,7 +411,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         } else if (ACTION_HOLD_TEST.equals(a)) {
             stopAll();
             power(true);
-            holdTestKind = (holdTestKind + 1) % HoldShow.COUNT;
+            holdTestKind = (holdTestKind + 1) % Animations.get(this).count();
             startHold(holdTestKind, HOLD_TEST_MS);
         } else if (ACTION_EXIT.equals(a)) {
             if (strip == null || !strip.on) { power(true); colour(settings.defaultHue, settings.defaultSat, targetPct(), true); }
@@ -817,13 +817,13 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                     final String after = UnitShell.run(UnitShell.Command.STATE);
                     final String line = (want ? "Écran : position appareil seul (GPS)" : "Écran : position remise comme avant")
                         + " (avant " + before + " ; après " + after + ")";
-                    main.post(new Runnable() { @Override public void run() { event(line); } });
+                    journal.log("ECRAN", line);   // journal only: no longer shown on screen (owner, 25 Nov)
                     if (want && attempt == 0) unitLogLater(45000);
                 } catch (final Throwable t) {
                     Log.w(TAG, "unit shell", t);
                     if (attempt + 1 < UNIT_TRIES) { unitApply(attempt + 1); return; }
                     main.post(new Runnable() {
-                        @Override public void run() { event("Écran : réglage GPS / alertes impossible (" + t.getMessage() + ")"); }
+                        @Override public void run() { journal.log("ECRAN", "réglage GPS / alertes impossible (" + t.getMessage() + ")"); }
                     });
                 }
             }
@@ -846,7 +846,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             @Override public void run() {
                 try {
                     final String now = UnitShell.run(UnitShell.Command.STATE);
-                    main.post(new Runnable() { @Override public void run() { event("Écran après démarrage : " + now); } });
+                    journal.log("ECRAN", "après démarrage : " + now);
                 } catch (Throwable ignored) {}
             }
         }, delayMs);
@@ -1178,25 +1178,29 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 return;
             }
             // at random, but never the same one twice in a row
-            int k = rnd.nextInt(holdKind < 0 ? HoldShow.COUNT : HoldShow.COUNT - 1);
-            if (holdKind >= 0 && k >= holdKind) k++;
+            int count = Animations.get(LedService.this).count();   // the built-in ones, then the recorded ones
+            int last = holdKind < count ? holdKind : -1;
+            int k = count < 2 ? 0 : rnd.nextInt(last < 0 ? count : count - 1);
+            if (last >= 0 && count >= 2 && k >= last) k++;
             startHold(k, 0);
         }
     };
 
     /** testMs > 0: a test from the app, ending by itself; 0: until the Auto Hold ends. */
     private void startHold(int kind, long testMs) {
-        trace("animation d'arrêt " + HoldShow.NAMES[kind] + (testMs > 0 ? " (test)" : ""));
+        Animations anims = Animations.get(this);
+        String name = anims.name(kind);
+        trace("animation d'arrêt " + name + (testMs > 0 ? " (test)" : "") + " (" + anims.summary() + ")");
         holdKind = kind;
-        holdShow = new HoldShow(kind, rnd);
+        holdShow = new HoldShow(kind, rnd, anims);
         hold = true;
         holdEnding = false;
         holdFrame = 0;
         holdW = 0;
         holdUntil = testMs > 0 ? SystemClock.elapsedRealtime() + testMs : 0;
         link.clearQueue();
-        ruleText = "Auto Hold : " + HoldShow.NAMES[kind];
-        event((testMs > 0 ? "Test arrêt : " : "Auto Hold : ") + HoldShow.NAMES[kind]);
+        ruleText = "Auto Hold : " + name;
+        event((testMs > 0 ? "Test arrêt : " : "Auto Hold : ") + name);
         main.removeCallbacks(holdTick);
         main.post(holdTick);
     }
@@ -1251,7 +1255,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             link.send(Zengge.pixels(holdHues, holdSats, holdVals));
             lastSentMs = SystemClock.elapsedRealtime();
             holdFrame++;
-            main.postDelayed(this, HoldShow.FRAME_MS);
+            main.postDelayed(this, holdShow.frameMs());
         }
     };
 
