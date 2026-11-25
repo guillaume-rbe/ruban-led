@@ -6,6 +6,7 @@ Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la re
 
 - **Mise à jour des animations sans réinstaller l'app** : carte « Animations », bouton « Mise à jour des animations ». Il ne télécharge que le fichier des animations (`animations/animations.json` sur GitHub) et montre chaque étape : recherche, téléchargement avec sa barre, vérification, mise en place. La carte dit quelle version est en place ; « Animations d'origine » revient à celles de l'app. Le fichier règle les animations à l'arrêt et peut en ajouter de nouvelles.
 - **Animations à l'arrêt plus lisibles** : Croisement, Du centre vers les bouts et Scintillement sur fond éteint (seules les lumières qui bougent sont allumées, avec une traîne plus courte et moins d'étoiles à la fois) ; Respiration lente descend à 5 % au lieu de 20 %.
+- **Page iPhone : mises à jour** : « Mise à jour des animations » et « Mise à jour de l'app » sur la page, avec les mêmes étapes et la même barre que sur l'écran (qui télécharge depuis GitHub, avec Internet). L'installation de l'app reste à confirmer sur l'écran de la voiture : fenêtre d'Android, ou notification « Mise à jour prête » si elle ne s'ouvre pas.
 - **Simulateur** (dossier `simulateur` du dépôt) : une page web qui joue toutes les animations de l'app sur les trois rubans, avec les mêmes délais et couleurs, et prépare le fichier des animations.
 - Le réglage « Écran : position activée » n'est plus affiché (il reste actif) ; ses relevés vont dans le journal au lieu de « Derniers événements ».
 

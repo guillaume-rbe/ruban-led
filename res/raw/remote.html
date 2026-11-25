@@ -60,6 +60,14 @@
   pre { margin:0; white-space:pre-wrap; font:13px/1.4 ui-monospace, Menlo, monospace; color:var(--muted); }
   #offline { display:none; background:#5a1d1d; color:#fff; border-radius:12px; padding:10px 14px; margin-bottom:14px; font-size:15px; }
   .hidden { display:none; }
+  .upd + .upd { border-top:1px solid var(--line); margin-top:14px; padding-top:14px; }
+  .upd .muted { margin:6px 0 10px; }
+  .bar { height:10px; border-radius:5px; background:#262A31; overflow:hidden; margin:10px 0 4px; }
+  .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
+  .bar.unknown i { width:35%; animation:slide 1.2s linear infinite; }
+  @keyframes slide { from { transform:translateX(-100%); } to { transform:translateX(290%); } }
+  .upd pre { color:var(--text); margin-top:8px; }
+  button:disabled { opacity:.5; }
 </style>
 </head>
 <body>
@@ -100,6 +108,23 @@
 <div class="card">
   <h2>RÈGLES</h2>
   <div id="rules"></div>
+</div>
+
+<div class="card">
+  <h2>MISE À JOUR</h2>
+  <div class="upd">
+    <button class="primary" id="updAnim">Mise à jour des animations</button>
+    <div class="muted" id="animState"></div>
+    <div class="bar hidden" id="animBar"><i></i></div>
+    <pre id="animText"></pre>
+  </div>
+  <div class="upd">
+    <button id="updApp">Mise à jour de l'app</button>
+    <div class="muted" id="version"></div>
+    <div class="bar hidden" id="appBar"><i></i></div>
+    <pre id="appText"></pre>
+  </div>
+  <div class="muted" style="margin-top:12px;font-size:13px">L'écran télécharge lui-même depuis GitHub : il lui faut Internet (partage de connexion du téléphone). Pour l'app, Android demande toujours de confirmer l'installation sur l'écran de la voiture.</div>
 </div>
 
 <div class="card">
@@ -218,6 +243,19 @@ $("nightSave").addEventListener("click", async () => {
   refresh();
 });
 
+// ---- updates (0.28): started here or on the dash, the same steps on both
+$("updAnim").addEventListener("click", () => { $("updAnim").disabled = true; post("update?w=anim").then(refresh); });
+$("updApp").addEventListener("click", () => { $("updApp").disabled = true; post("update?w=app").then(refresh); });
+function showUpdate(btn, bar, textEl, text, pct, busy) {
+  $(btn).disabled = busy;
+  $(textEl).textContent = text;
+  const b = $(bar);
+  b.classList.toggle("hidden", !busy || pct === -1);
+  b.classList.toggle("unknown", pct === -2);
+  b.firstElementChild.style.width = pct >= 0 ? pct + "%" : "";
+}
+let updating = false;
+
 // ---- state, every 2 s
 function setPanel(p, hsv) {
   if (Date.now() - p.editedAt < 3000) return;    // being moved: don't jump back
@@ -248,6 +286,11 @@ async function refresh() {
     if (!focused && Date.now() - nightEditedAt > 60000) {
       [$("nw").value, $("ns").value, $("ne").value, $("np").value] = s.nightVals;
     }
+    $("version").textContent = s.version;
+    $("animState").textContent = s.animState;
+    showUpdate("updAnim", "animBar", "animText", s.animText, s.animPct, s.animBusy);
+    showUpdate("updApp", "appBar", "appText", s.appText, s.appPct, s.appBusy);
+    updating = s.animBusy || s.appBusy;
     $("seen").textContent = new Date().toLocaleTimeString("fr-FR");
   } catch (e) {
     $("offline").style.display = "block";
@@ -255,7 +298,12 @@ async function refresh() {
   }
 }
 refresh();
-setInterval(() => { if (!document.hidden) refresh(); }, 2000);
+// every 2 s, every 0.5 s while an update runs (its bar)
+let lastRefresh = 0;
+setInterval(() => {
+  if (document.hidden) return;
+  if (Date.now() - lastRefresh >= (updating ? 500 : 2000)) { lastRefresh = Date.now(); refresh(); }
+}, 250);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 </script>
 </body>

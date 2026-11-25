@@ -53,11 +53,21 @@ final class Updater {
     }
 
     static final String REPO = "guillaume-rbe/ruban-led";
+
+    /**
+     * What the updates are doing, for the app's screen and the iPhone page (0.28): either can start
+     * them, both show the same steps. percent: -1 no bar, -2 size unknown, else 0-100.
+     */
+    static volatile String appText = "", animText = "";
+    static volatile int appPercent = -1, animPercent = -1;
+    static volatile boolean appBusy, animBusy;
     private static final String RELEASES = "https://api.github.com/repos/" + REPO + "/releases?per_page=30";
     private static final String TAG_PREFIX = "ruban-led-v";
     private static final String APK = "ruban-led.apk";
     private static final String SHA = "ruban-led.apk.sha256";
     private static final String LOG = "rubanled";
+    private static final String UPDATE_CHANNEL = "update";
+    private static final int UPDATE_NOTE = 7;
     static final String ANIM_PATH = "animations/animations.json";
     /** The last commit of main that changed the file: its sha names that exact version of the file. */
     private static final String ANIM_COMMITS = "https://api.github.com/repos/" + REPO
@@ -86,11 +96,36 @@ final class Updater {
         }
     }
 
+    /** Starts the app update unless one runs; false if it already runs. */
+    static synchronized boolean startApp(Context ctx) {
+        if (appBusy) return false;
+        appBusy = true;
+        new Updater(ctx, null).run();
+        return true;
+    }
+
+    /** Starts the animations update unless one runs; false if it already runs. */
+    static synchronized boolean startAnimations(Context ctx) {
+        if (animBusy) return false;
+        animBusy = true;
+        animText = "";
+        animPercent = -1;
+        new Updater(ctx, null).runAnimations(null);
+        return true;
+    }
+
     /** Check, and install if there is a newer release. */
     void run() {
+        appBusy = true;
+        appPercent = -1;
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
+                    if (!ctx.getPackageManager().canRequestPackageInstalls()) {
+                        status("Autoriser d'abord « Installer des applis inconnues » pour Ruban LED : "
+                            + "bouton « Mise à jour » sur l'écran de la voiture, une seule fois");
+                        return;
+                    }
                     check();
                 } catch (Throwable t) {
                     Log.w(LOG, "update failed", t);
@@ -98,6 +133,9 @@ final class Updater {
                     status("Mise à jour impossible : " + msg
                         + (viaSystem && !msg.startsWith(NO_NETWORK) ?" (même via le gestionnaire de téléchargements d'Android). "
                             + "Redémarrer l'écran une fois corrige un accès réseau refusé." : ""));
+                } finally {
+                    appPercent = -1;
+                    appBusy = false;
                 }
             }
         }, "updater").start();
@@ -142,14 +180,22 @@ final class Updater {
         }
         String expected = new String(fetch(shaUrl, SHA, 1024), "UTF-8").trim().split("\\s+")[0].toLowerCase();
         status("Téléchargement de la version " + bestCode + "…");
-        byte[] apk = fetch(apkUrl, APK, 50 << 20);
+        final int code = bestCode;
+        byte[] apk = fetch(apkUrl, APK, 50 << 20, new Progress() {
+            @Override public void bytes(long done, long total) {
+                appPercent = total > 0 ? (int) Math.min(100, done * 100 / total) : -2;
+                status("Téléchargement de la version " + code + " : " + kb(done) + (total > 0 ? " sur " + kb(total) : ""));
+            }
+        });
+        appPercent = -1;
         String actual = hex(MessageDigest.getInstance("SHA-256").digest(apk));
         if (!actual.equals(expected)) {
             status("Fichier téléchargé corrompu (SHA-256), mise à jour annulée");
             return;
         }
         install(apk);
-        status("Version " + bestCode + " prête : confirmer l'installation à l'écran");
+        status("Version " + bestCode + " prête : confirmer l'installation sur l'écran de la voiture "
+            + "(fenêtre d'Android, ou notification « Mise à jour prête »)");
     }
 
     // ---- animations (0.28): only animations/animations.json, no APK
@@ -162,6 +208,7 @@ final class Updater {
     /** Downloads animations/animations.json from main, checks it and puts it in place. */
     void runAnimations(AnimListener l) {
         animListener = l;
+        animBusy = true;
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
@@ -247,6 +294,9 @@ final class Updater {
     private void sendAnim(final int percent, final boolean done) {
         final String text;
         synchronized (animLines) { text = android.text.TextUtils.join("\n", animLines); }
+        animText = text;
+        animPercent = done ? -1 : percent;
+        if (done) animBusy = false;
         main.post(new Runnable() {
             @Override public void run() { if (animListener != null) animListener.onAnimSteps(text, percent, done); }
         });
@@ -279,7 +329,30 @@ final class Updater {
             int status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
             if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
                 Intent confirm = i.getParcelableExtra(Intent.EXTRA_INTENT);
-                if (confirm != null) c.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                if (confirm == null) return;
+                confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                // started from the iPhone page, the app may be in the background, where Android 10
+                // can refuse to open a screen: the notification opens it too
+                try {
+                    android.app.NotificationManager nm = (android.app.NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+                    nm.createNotificationChannel(new android.app.NotificationChannel(UPDATE_CHANNEL, "Mise à jour",
+                        android.app.NotificationManager.IMPORTANCE_HIGH));
+                    PendingIntent tap = PendingIntent.getActivity(c, 1, confirm, PendingIntent.FLAG_UPDATE_CURRENT);
+                    nm.notify(UPDATE_NOTE, new android.app.Notification.Builder(c, UPDATE_CHANNEL)
+                        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                        .setContentTitle("Ruban LED : mise à jour prête")
+                        .setContentText("Toucher pour installer")
+                        .setContentIntent(tap)
+                        .setAutoCancel(true)
+                        .build());
+                } catch (Throwable t) {
+                    Log.w(LOG, "update notification", t);
+                }
+                try {
+                    c.startActivity(confirm);
+                } catch (Throwable t) {
+                    Log.w(LOG, "install screen refused", t);
+                }
             } else if (status != PackageInstaller.STATUS_SUCCESS) {
                 Log.w(LOG, "install failed: " + i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE));
             }
@@ -405,6 +478,8 @@ final class Updater {
     }
 
     private void status(final String text) {
+        appText = text;
+        if (listener == null) return;
         main.post(new Runnable() {
             @Override public void run() { listener.onUpdateStatus(text); }
         });

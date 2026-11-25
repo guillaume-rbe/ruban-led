@@ -240,6 +240,15 @@ final class RemoteServer {
                 ns.save(ctx);
                 host.handle(new Intent(LedService.ACTION_RELOAD));
                 reply(out, 200, "application/json", "{\"ok\":true}");
+            } else if ("update".equals(what) && "POST".equals(method)) {
+                // 0.28: the same updates as the app's buttons, downloaded by the dash from GitHub
+                boolean started;
+                if ("app".equals(p.get("w"))) started = Updater.startApp(ctx);
+                else if ("anim".equals(p.get("w"))) started = Updater.startAnimations(ctx);
+                else { reply(out, 400, "text/plain", "Mise à jour inconnue"); return; }
+                host.event(("app".equals(p.get("w")) ? "iPhone : mise à jour de l'app" : "iPhone : mise à jour des animations")
+                    + (started ? "" : " (déjà en cours)"));
+                reply(out, 200, "application/json", "{\"ok\":true}");
             } else if ("rule".equals(what) && "POST".equals(method)) {
                 if (!setRule(p.get("k"), "1".equals(p.get("v")))) { reply(out, 400, "text/plain", "Règle inconnue"); return; }
                 host.handle(new Intent(LedService.ACTION_RELOAD));
@@ -370,7 +379,14 @@ final class RemoteServer {
         b.append("},");
         str(b, "night", nightText(s)).append(',');
         b.append("\"nightVals\":[").append(s.nightStartWinter).append(',').append(s.nightStartSummer).append(',')
-            .append(s.nightEnd).append(',').append(s.nightPct).append(']');
+            .append(s.nightEnd).append(',').append(s.nightPct).append("],");
+        // the updates (0.28), wherever they were started
+        str(b, "version", "Version " + Updater.installedVersion(ctx)).append(',');
+        str(b, "appText", Updater.appText).append(',');
+        b.append("\"appPct\":").append(Updater.appPercent).append(",\"appBusy\":").append(Updater.appBusy).append(',');
+        str(b, "animState", "En place : " + Animations.get(ctx).summary()).append(',');
+        str(b, "animText", Updater.animText).append(',');
+        b.append("\"animPct\":").append(Updater.animPercent).append(",\"animBusy\":").append(Updater.animBusy);
         return b.append('}').toString();
     }
 

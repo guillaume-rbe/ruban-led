@@ -56,7 +56,6 @@ public final class MainActivity extends Activity {
     private TextView animState, animSteps;
     private ProgressBar animBar;
     private Button animUpdate, animReset;
-    private boolean animBusy;
     private Button send24, sendAll;
     private static boolean askedBattery;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
@@ -341,11 +340,11 @@ public final class MainActivity extends Activity {
         animReset = pill("Animations d'origine", false);
         animReset.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
+                if (Updater.animBusy) return;
                 Animations.reset(MainActivity.this);
-                animSteps.setText("✓ Animations d'origine remises (celles intégrées à l'app)");
-                animSteps.setVisibility(View.VISIBLE);
-                animBar.setVisibility(View.GONE);
+                Updater.animText = "✓ Animations d'origine remises (celles intégrées à l'app)";
                 refreshAnimations();
+                refreshUpdates();
             }
         });
         ar.setBaselineAligned(false);
@@ -442,38 +441,46 @@ public final class MainActivity extends Activity {
                 : "L'adresse complète s'affiche à la première connexion de l'iPhone en CarPlay");
             autoPlayAccess.setVisibility(CarPlayAutoPlay.hasAccess(MainActivity.this) ? View.GONE : View.VISIBLE);
             refreshJournal();
-            main.postDelayed(this, Journal.sending ? 250 : 1000);
+            refreshUpdates();
+            main.postDelayed(this, Journal.sending || Updater.animBusy || Updater.appBusy ? 250 : 1000);
         }
     };
 
     // ---- animations (0.28)
 
     private void updateAnimations() {
-        if (animBusy) return;
-        animBusy = true;
-        animUpdate.setEnabled(false);
-        animReset.setEnabled(false);
-        animUpdate.setAlpha(0.5f);
-        animReset.setAlpha(0.5f);
-        new Updater(this, new Updater.Listener() {
-            @Override public void onUpdateStatus(String text) { }
-        }).runAnimations(new Updater.AnimListener() {
-            @Override public void onAnimSteps(String steps, int percent, boolean done) {
-                animSteps.setVisibility(steps.isEmpty() ? View.GONE : View.VISIBLE);
-                animSteps.setText(steps);
-                animBar.setVisibility(percent == -1 || done ? View.GONE : View.VISIBLE);
-                animBar.setIndeterminate(percent == -2);
-                if (percent >= 0) animBar.setProgress(percent);
-                if (done) {
-                    animBusy = false;
-                    animUpdate.setEnabled(true);
-                    animReset.setEnabled(true);
-                    animUpdate.setAlpha(1f);
-                    animReset.setAlpha(1f);
-                    refreshAnimations();
-                }
-            }
-        });
+        Updater.startAnimations(this);
+        refreshUpdates();
+    }
+
+    /**
+     * The two updates, started here or from the iPhone page (0.28): the same steps on both,
+     * read from Updater every refresh.
+     */
+    private boolean animWasBusy;
+    private String appShown = "";
+
+    private void refreshUpdates() {
+        boolean busy = Updater.animBusy;
+        String steps = Updater.animText;
+        animSteps.setVisibility(steps.isEmpty() ? View.GONE : View.VISIBLE);
+        animSteps.setText(steps);
+        int pct = Updater.animPercent;
+        animBar.setVisibility(busy && pct != -1 ? View.VISIBLE : View.GONE);
+        animBar.setIndeterminate(pct == -2);
+        if (pct >= 0) animBar.setProgress(pct);
+        animUpdate.setEnabled(!busy);
+        animReset.setEnabled(!busy);
+        animUpdate.setAlpha(busy ? 0.5f : 1f);
+        animReset.setAlpha(busy ? 0.5f : 1f);
+        if (animWasBusy && !busy) refreshAnimations();
+        animWasBusy = busy;
+        String app = Updater.appText;
+        if (!app.equals(appShown)) {
+            appShown = app;
+            updateText.setText(app.isEmpty() ? "Version " + Updater.installedVersion(this) + "  ·  github.com/" + Updater.REPO
+                : app + (Updater.appPercent >= 0 ? "  (" + Updater.appPercent + " %)" : ""));
+        }
     }
 
     private void refreshAnimations() {
@@ -556,9 +563,8 @@ public final class MainActivity extends Activity {
             Toast.makeText(this, "Autoriser « Installer des applis inconnues », puis réessayer", Toast.LENGTH_LONG).show();
             return;
         }
-        new Updater(this, new Updater.Listener() {
-            @Override public void onUpdateStatus(String text) { updateText.setText(text); }
-        }).run();
+        Updater.startApp(this);
+        refreshUpdates();
     }
 
     /**
