@@ -199,10 +199,8 @@ final class Animations {
 
     /** One line for the screen: "version 2 du 2026-11-25 · 5 réglées + 1 enregistrée". */
     String summary() {
-        if (version == 0 && date.isEmpty()) return "animations intégrées à l'app";
-        int n = recorded.size();
-        return "version " + version + (date.isEmpty() ? "" : " du " + date) + " · " + HoldShow.NAMES.length + " réglées"
-            + (n == 0 ? "" : " + " + n + " enregistrée" + (n > 1 ? "s" : ""));
+        if (version == 0 && date.isEmpty()) return "d'origine";
+        return "version " + version + (date.isEmpty() ? "" : " du " + date);
     }
 
     private static byte[] read(File f) throws Exception {

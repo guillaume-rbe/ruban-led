@@ -90,12 +90,12 @@
     <button data-do="off">Éteindre</button>
     <button data-do="default" class="primary">Couleur permanente</button>
   </div>
-  <button class="ghost" id="testsBtn">Boutons de test ▸</button>
+  <button class="ghost" id="testsBtn">Tests ▸</button>
   <div class="grid hidden" id="tests" style="margin-top:8px">
-    <button data-do="intro">Animation d'allumage</button>
-    <button data-do="exit">Animation d'extinction</button>
-    <button data-do="blink">Clignotement d'alerte</button>
-    <button data-do="hold">Animations à l'arrêt</button>
+    <button data-do="intro">Allumage</button>
+    <button data-do="exit">Extinction</button>
+    <button data-do="blink">Clignotement</button>
+    <button data-do="hold">Animation à l'arrêt</button>
   </div>
 </div>
 
@@ -124,7 +124,7 @@
     <div class="bar hidden" id="appBar"><i></i></div>
     <pre id="appText"></pre>
   </div>
-  <div class="muted" style="margin-top:12px;font-size:13px">L'écran télécharge lui-même depuis GitHub : il lui faut Internet (partage de connexion du téléphone). Pour l'app, Android demande toujours de confirmer l'installation sur l'écran de la voiture.</div>
+  <div class="muted" style="margin-top:12px;font-size:13px">Il faut Internet sur l'écran. L'installation de l'app se confirme sur l'écran de la voiture.</div>
 </div>
 
 <div class="card">
@@ -137,13 +137,13 @@
 // the code is the first part of the path: http://<dash>:8080/<code>
 const BASE = "/" + location.pathname.split("/")[1] + "/";
 const RULES = [
-  ["intro", "Animations ×3", "Allumage au déverrouillage, extinction au verrouillage"],
-  ["holdAnim", "Animation à l'arrêt", "Arrêté en D après avoir roulé : une fois sur N, une animation au hasard"],
-  ["apFlash", "Bleu à l'activation de l'Autosteer", "1 s dans le bleu de l'Autopilot"],
-  ["reverseWhite", "Blanc en marche arrière", "Un blanc qui respire, un peu plus fort que la couleur permanente"],
-  ["doorBlink", "Alerte à l'ouverture", "Le ruban clignote dans la couleur d'alerte quand une portière, le coffre ou le frunk s'ouvre"],
+  ["intro", "Animations ×3", "Au déverrouillage et au verrouillage"],
+  ["holdAnim", "Animation à l'arrêt", "À 0 km/h en D, une fois sur N"],
+  ["apFlash", "Bleu à l'Autosteer", ""],
+  ["reverseWhite", "Blanc en marche arrière", ""],
+  ["doorBlink", "Alerte à l'ouverture", "Portières, coffre, frunk"],
   ["hazard", "Clignoter avec les warnings", ""],
-  ["autoPlay", "Musique à la connexion CarPlay", "Relance la dernière appli audio de l'iPhone"],
+  ["autoPlay", "Musique à la connexion CarPlay", ""],
   ["night", "Mode nuit", ""],
 ];
 const $ = id => document.getElementById(id);
@@ -158,7 +158,7 @@ document.querySelectorAll("button[data-do]").forEach(b =>
 $("testsBtn").addEventListener("click", () => {
   const t = $("tests"), show = t.classList.contains("hidden");
   t.classList.toggle("hidden", !show);
-  $("testsBtn").textContent = show ? "Boutons de test ▾" : "Boutons de test ▸";
+  $("testsBtn").textContent = show ? "Tests ▾" : "Tests ▸";
 });
 
 // ---- colour panels

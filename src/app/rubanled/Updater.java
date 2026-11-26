@@ -47,6 +47,11 @@ final class Updater {
         void onAnimSteps(String steps, int percent, boolean done);
     }
 
+    /** Startup check (0.29): called on the main thread only when GitHub has other animations. */
+    interface AnimCheck {
+        void onNewAnimations(String sha, String when);
+    }
+
     /** Bytes received so far, and the total (-1 if the server doesn't say). */
     private interface Progress {
         void bytes(long done, long total);
@@ -114,6 +119,45 @@ final class Updater {
         return true;
     }
 
+    /**
+     * At the app's start (0.29): is there Internet, and other animations on GitHub than those in
+     * place? Only the app's own connection, short timeouts, and nothing shown when it fails.
+     */
+    static void checkAnimations(Context ctx, final AnimCheck cb) {
+        final Context app = ctx.getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    JSONArray commits = new JSONArray(new String(get(ANIM_COMMITS, 1 << 20, null, 5000), "UTF-8"));
+                    if (commits.length() == 0) return;
+                    JSONObject last = commits.getJSONObject(0);
+                    final String sha = last.getString("sha");
+                    if (sha.equals(Animations.installedSha(app))) return;
+                    final String when = commitDate(last);
+                    new Handler(Looper.getMainLooper()).post(new Runnable() {
+                        @Override public void run() { cb.onNewAnimations(sha, when); }
+                    });
+                } catch (Throwable t) {
+                    Log.i(LOG, "animations check skipped: " + t);      // no Internet: nothing to say
+                }
+            }
+        }, "animations-check").start();
+    }
+
+    /** "25/11 à 19:44" (local time) from a commit's committer date, or "". */
+    private static String commitDate(JSONObject last) {
+        JSONObject commit = last.optJSONObject("commit");
+        JSONObject who = commit == null ? null : commit.optJSONObject("committer");
+        String d = who == null ? "" : who.optString("date", "");
+        try {
+            java.text.SimpleDateFormat in = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US);
+            in.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            return new java.text.SimpleDateFormat("dd/MM 'à' HH:mm", java.util.Locale.FRANCE).format(in.parse(d));
+        } catch (Exception e) {
+            return d;
+        }
+    }
+
     /** Check, and install if there is a newer release. */
     void run() {
         appBusy = true;
@@ -122,8 +166,7 @@ final class Updater {
             @Override public void run() {
                 try {
                     if (!ctx.getPackageManager().canRequestPackageInstalls()) {
-                        status("Autoriser d'abord « Installer des applis inconnues » pour Ruban LED : "
-                            + "bouton « Mise à jour » sur l'écran de la voiture, une seule fois");
+                        status("Autoriser d'abord « Installer des applis inconnues » (bouton sur l'écran de la voiture)");
                         return;
                     }
                     check();
@@ -131,8 +174,7 @@ final class Updater {
                     Log.w(LOG, "update failed", t);
                     String msg = String.valueOf(t.getMessage());
                     status("Mise à jour impossible : " + msg
-                        + (viaSystem && !msg.startsWith(NO_NETWORK) ?" (même via le gestionnaire de téléchargements d'Android). "
-                            + "Redémarrer l'écran une fois corrige un accès réseau refusé." : ""));
+                        + (viaSystem && !msg.startsWith(NO_NETWORK) ? " (redémarrer l'écran peut corriger)" : ""));
                 } finally {
                     appPercent = -1;
                     appBusy = false;
@@ -143,7 +185,7 @@ final class Updater {
 
     private void check() throws Exception {
         int current = installedVersion(ctx);
-        status("Recherche d'une mise à jour…");
+        status("Recherche…");
         JSONArray releases = new JSONArray(new String(fetch(RELEASES, "releases.json", 1 << 20), "UTF-8"));
         JSONObject best = null;
         int bestCode = current;
@@ -164,7 +206,7 @@ final class Updater {
             }
         }
         if (best == null) {
-            status("Déjà à jour (version " + current + ")");
+            status("Déjà à jour");
             return;
         }
         String apkUrl = null, shaUrl = null;
@@ -179,23 +221,22 @@ final class Updater {
             return;
         }
         String expected = new String(fetch(shaUrl, SHA, 1024), "UTF-8").trim().split("\\s+")[0].toLowerCase();
-        status("Téléchargement de la version " + bestCode + "…");
+        status("Téléchargement…");
         final int code = bestCode;
         byte[] apk = fetch(apkUrl, APK, 50 << 20, new Progress() {
             @Override public void bytes(long done, long total) {
                 appPercent = total > 0 ? (int) Math.min(100, done * 100 / total) : -2;
-                status("Téléchargement de la version " + code + " : " + kb(done) + (total > 0 ? " sur " + kb(total) : ""));
+                status("Téléchargement : " + kb(done) + (total > 0 ? " / " + kb(total) : ""));
             }
         });
         appPercent = -1;
         String actual = hex(MessageDigest.getInstance("SHA-256").digest(apk));
         if (!actual.equals(expected)) {
-            status("Fichier téléchargé corrompu (SHA-256), mise à jour annulée");
+            status("Fichier corrompu, mise à jour annulée");
             return;
         }
         install(apk);
-        status("Version " + bestCode + " prête : confirmer l'installation sur l'écran de la voiture "
-            + "(fenêtre d'Android, ou notification « Mise à jour prête »)");
+        status("Version " + bestCode + " prête : confirmer l'installation à l'écran");
     }
 
     // ---- animations (0.28): only animations/animations.json, no APK
@@ -216,58 +257,46 @@ final class Updater {
                 } catch (Throwable t) {
                     Log.w(LOG, "animations update failed", t);
                     String msg = String.valueOf(t.getMessage());
-                    setLast("✗ " + animStep + " : " + msg + (viaSystem && !msg.startsWith(NO_NETWORK)
-                        ? " (même via le gestionnaire de téléchargements d'Android)" : "")
-                        + ". Les animations actuelles restent en place.", -1, true);
+                    setLast("✗ " + animStep + " : " + msg + ". Animations actuelles gardées.", -1, true);
                 }
             }
         }, "animations").start();
     }
 
     private void animations() throws Exception {
-        addLine("Recherche sur GitHub", -1);
+        addLine("Recherche", -1);
         JSONArray commits = new JSONArray(new String(fetch(ANIM_COMMITS, "commits.json", 1 << 20, null), "UTF-8"));
         if (commits.length() == 0) throw new Exception("pas de fichier " + ANIM_PATH + " sur GitHub");
         JSONObject last = commits.getJSONObject(0);
         String sha = last.getString("sha");
-        JSONObject commit = last.optJSONObject("commit");
-        String when = "", what = "";
-        if (commit != null) {
-            JSONObject who = commit.optJSONObject("committer");
-            if (who != null) when = who.optString("date", "").replace('T', ' ').replace("Z", " UTC");
-            what = commit.optString("message", "").split("\n")[0];
-        }
-        setLast("✓ Trouvé : modifié le " + when + (what.isEmpty() ? "" : " (« " + what + " »)"), -1, false);
+        String when = commitDate(last);
         if (sha.equals(Animations.installedSha(ctx))) {
-            addLine("✓ Déjà à jour : ce fichier est déjà en place (" + Animations.get(ctx).summary() + ")", -1);
-            setLast("✓ Déjà à jour : ce fichier est déjà en place (" + Animations.get(ctx).summary() + ")", -1, true);
+            setLast("✓ Déjà à jour" + (when.isEmpty() ? "" : " (version du " + when + ")"), -1, true);
             return;
         }
+        setLast("✓ Trouvée : version du " + when, -1, false);
         addLine("Téléchargement", 0);
         // this exact version of the file (by its commit), never a copy cached by GitHub
         String url = "https://raw.githubusercontent.com/" + REPO + "/" + sha + "/" + ANIM_PATH;
         byte[] data = fetch(url, "animations.json", Animations.MAX_BYTES, new Progress() {
             @Override public void bytes(long done, long total) {
                 int pct = total > 0 ? (int) Math.min(100, done * 100 / total) : -2;
-                setLast("…  Téléchargement : " + kb(done) + (total > 0 ? " sur " + kb(total) : ""), pct, false);
+                setLast("…  Téléchargement : " + kb(done) + (total > 0 ? " / " + kb(total) : ""), pct, false);
             }
         });
         setLast("✓ Reçu : " + kb(data.length), 100, false);
-        addLine("Vérification du fichier", 100);
+        addLine("Vérification", 100);
         Animations a;
         try {
             a = Animations.parse(data);
         } catch (Exception e) {
-            setLast("✗ Fichier refusé : " + e.getMessage() + ". Les animations actuelles restent en place.", -1, true);
+            setLast("✗ Fichier refusé : " + e.getMessage() + ". Animations actuelles gardées.", -1, true);
             return;
         }
-        StringBuilder names = new StringBuilder();
-        for (Animations.Recorded r : a.recorded) names.append(names.length() == 0 ? " (" : ", ").append(r.name);
-        if (names.length() > 0) names.append(')');
-        setLast("✓ Vérifié : " + a.summary() + names + (a.description.isEmpty() ? "" : " : « " + a.description + " »"), 100, false);
+        setLast("✓ Fichier valide : " + a.summary(), 100, false);
         addLine("Mise en place", 100);
         Animations.install(ctx, data, sha);
-        setLast("✓ En place : la prochaine animation d'arrêt l'utilise (« Boutons de test » → « Animations à l'arrêt » pour la voir)", -1, true);
+        setLast("✓ Animations installées (à voir : Tests → Animation à l'arrêt)", -1, true);
     }
 
     private static String kb(long n) {
@@ -367,7 +396,7 @@ final class Updater {
     private byte[] fetch(String url, String name, int max, Progress progress) throws Exception {
         if (!viaSystem) {
             try {
-                return get(url, max, progress);
+                return get(url, max, progress, 15000);
             } catch (java.net.SocketException | java.net.UnknownHostException | SecurityException e) {
                 // also what no network looks like: Android's downloader then gives up quickly
                 // (it reports it waits for a network, or nothing arrives), see viaDownloadManager
@@ -445,10 +474,10 @@ final class Updater {
         }
     }
 
-    private static byte[] get(String url, int max, Progress progress) throws Exception {
+    private static byte[] get(String url, int max, Progress progress, int connectMs) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setConnectTimeout(15000);
-        c.setReadTimeout(30000);
+        c.setConnectTimeout(connectMs);
+        c.setReadTimeout(connectMs * 2);
         c.setRequestProperty("Accept", "application/vnd.github+json, application/octet-stream");
         c.setRequestProperty("User-Agent", "ruban-led-updater");
         c.setInstanceFollowRedirects(true);

@@ -384,7 +384,7 @@ final class RemoteServer {
         str(b, "version", "Version " + Updater.installedVersion(ctx)).append(',');
         str(b, "appText", Updater.appText).append(',');
         b.append("\"appPct\":").append(Updater.appPercent).append(",\"appBusy\":").append(Updater.appBusy).append(',');
-        str(b, "animState", "En place : " + Animations.get(ctx).summary()).append(',');
+        str(b, "animState", "Animations : " + Animations.get(ctx).summary()).append(',');
         str(b, "animText", Updater.animText).append(',');
         b.append("\"animPct\":").append(Updater.animPercent).append(",\"animBusy\":").append(Updater.animBusy);
         return b.append('}').toString();
@@ -392,8 +392,7 @@ final class RemoteServer {
 
     /** "Hiver dès 19 h, été dès 21 h, jusqu'à 7 h : tout à 20 %", as the app shows it. */
     static String nightText(Settings s) {
-        return "Hiver dès " + s.nightStartWinter + " h, été dès " + s.nightStartSummer + " h, jusqu'à "
-            + s.nightEnd + " h : tout à " + s.nightPct + " %";
+        return s.nightStartWinter + " h (été " + s.nightStartSummer + " h) → " + s.nightEnd + " h · " + s.nightPct + " %";
     }
 
     private static StringBuilder str(StringBuilder b, String key, String value) {

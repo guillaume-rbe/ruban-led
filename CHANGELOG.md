@@ -2,6 +2,15 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.29
+
+- **« Mise à jour des animations » tout en haut**, sur la première ligne, à droite de l'état de la connexion au ruban. Les étapes et la barre s'affichent dans une fenêtre (aussi quand la mise à jour est lancée depuis l'iPhone).
+- **Nouvelles animations proposées à l'ouverture** : seulement quand on ouvre soi-même l'app (pas au retour d'un écran d'Android ni au réveil de la voiture avec l'app affichée) ; si l'écran a Internet et que GitHub a d'autres animations que celles en place, une fenêtre demande « Mettre à jour les animations ? ». Rien ne s'affiche sans Internet ou si elles sont déjà à jour ; « Plus tard » ne redemande pas pour cette version.
+- **Section « Debug » repliée** : envoi des journaux, journal détaillé, codes CAN et derniers événements sont sous un seul bouton.
+- **Textes raccourcis partout** : état (portes et verrouillage sur une ligne, l'état de l'app CAN seulement en cas de souci), règles, page iPhone (le lien, le code et une ligne d'état), mises à jour. Boutons de test : « Tests » → Allumage, Extinction, Clignotement, Animation à l'arrêt.
+- **Écran plus compact** : les deux couleurs côte à côte, tous les nombres (nuit, clignotement, animations) sous « Réglages » avec un seul « Enregistrer », « Mise à jour de l'app » et « Animations d'origine » dans « Ruban et application ».
+- Page iPhone : mêmes textes raccourcis.
+
 ## 0.28
 
 - **Mise à jour des animations sans réinstaller l'app** : carte « Animations », bouton « Mise à jour des animations ». Il ne télécharge que le fichier des animations (`animations/animations.json` sur GitHub) et montre chaque étape : recherche, téléchargement avec sa barre, vérification, mise en place. La carte dit quelle version est en place ; « Animations d'origine » revient à celles de l'app. Le fichier règle les animations à l'arrêt et peut en ajouter de nouvelles.

@@ -1,6 +1,8 @@
 package app.rubanled;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -30,7 +32,8 @@ import android.widget.Toast;
 
 /**
  * Settings and status, built in code (plain SDK build, no layouts): a dark screen of cards.
- * Left: status and the two colours. Right: actions, rules (switches save at once) and the strip.
+ * Top line: the strip's connection and the animations update. Left: status, colours, iPhone page, strip.
+ * Right: actions, rules (switches save at once), then « Debug » (folded).
  */
 public final class MainActivity extends Activity {
     // palette (dark theme, res/values/styles.xml)
@@ -45,19 +48,28 @@ public final class MainActivity extends Activity {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView remoteLine, remoteUrl, nightSummary;
-    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, presenceLine, eventsLine, autoPlayLine;
+    private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, eventsLine, autoPlayLine, animState;
     private Button autoPlayAccess;
     private View linkDot;
     private EditText address, blinkMs, blinkMax, repeat, holdChance, nightWinter, nightSummer, nightEnd, nightPct, journalCodes;
-    /** Journal card (0.20): certificate state, upload steps and progress. */
+    /** Journal (0.20), under « Debug » since 0.29: certificate state, upload steps and progress. */
     private TextView journalState, journalSteps;
     private ProgressBar journalBar;
-    /** Animations card (0.28): the file in place, the update's steps and progress. */
-    private TextView animState, animSteps;
+    /** Animations update (0.28), its steps and progress in a window since 0.29. */
+    private TextView animSteps;
     private ProgressBar animBar;
+    private AlertDialog animDialog;
     private Button animUpdate, animReset;
     private Button send24, sendAll;
     private static boolean askedBattery;
+    /**
+     * The animations on GitHub are looked at only when the owner opens the app (0.29): launcher,
+     * recent apps or notification. Not when coming back from a screen the app opened itself
+     * (Android's settings, the install screen), nor when the dash wakes with the app on top.
+     */
+    private boolean openedByOwner = true;
+    /** Set just before the app opens one of Android's screens. */
+    private boolean ownScreen;
     /** While dragging, at most one colour every this often (the strip acks each in ~150 ms). */
     private static final long COLOUR_THROTTLE_MS = 200;
 
@@ -69,7 +81,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(20), dp(14), dp(20), dp(20));
+        page.setPadding(dp(20), dp(12), dp(20), dp(20));
         page.setBackgroundColor(BG);
         page.addView(header());
 
@@ -79,27 +91,14 @@ public final class MainActivity extends Activity {
         columns.addView(right, weight(1f, 0));
         page.addView(columns);
 
-        // ---- left: status, colours
+        // ---- left: status, colours, iPhone page, strip and app
         LinearLayout status = card(left, "État");
-        LinearLayout linkRow = new LinearLayout(this);
-        linkRow.setGravity(Gravity.CENTER_VERTICAL);
-        linkDot = new View(this);
-        linkRow.addView(linkDot, new LinearLayout.LayoutParams(dp(12), dp(12)));
-        linkLine = text("", 17, TEXT, true);
-        linkLine.setPadding(dp(10), 0, 0, 0);
-        linkRow.addView(linkLine);
-        status.addView(linkRow);
-        stripLine = text("", 15, MUTED, false);
+        stripLine = text("", 15, TEXT, false);
         doorsLine = text("", 15, MUTED, false);
         ruleLine = text("", 15, WARN, true);
         status.addView(stripLine);
         status.addView(doorsLine);
         status.addView(ruleLine);
-        presenceLine = text("", 15, MUTED, false);
-        status.addView(presenceLine);
-        status.addView(text("Déverrouillage : animation d'allumage ×3 puis couleur permanente. Verrouillage : "
-            + "animation d'extinction ×3 puis ruban éteint (lu sur les clignotants de la voiture).", 14, MUTED, false));
-
 
         LinearLayout colours = card(left, "Couleurs");
         // locked by default (owner, 17 Nov): a scroll over a wheel must not change a colour
@@ -109,32 +108,61 @@ public final class MainActivity extends Activity {
         });
         LinearLayout.LayoutParams lb = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lb.bottomMargin = dp(12);
+        lb.bottomMargin = dp(10);
         colours.addView(lockButton, lb);
         steadyPanel = new ColourPanel(LedService.TARGET_STEADY, "Permanente",
             s.defaultHue, s.defaultSat, s.dayPct);
-        colours.addView(steadyPanel.view);
+        // the two colours side by side (0.29): half the height on the 10.25" screen
+        LinearLayout pair = new LinearLayout(this);
+        pair.setBaselineAligned(false);
+        pair.addView(steadyPanel.view, weight(1, 0));
         View sep = new View(this);
         sep.setBackgroundColor(CARD_LINE);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
-        sp.setMargins(0, dp(14), 0, dp(14));
-        colours.addView(sep, sp);
-        alertPanel = new ColourPanel(LedService.TARGET_ANIM, "Alertes (portes, coffre, frunk, warnings)",
-            s.blinkHue, s.blinkSat, s.blinkPct);
-        colours.addView(alertPanel.view);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(1), LinearLayout.LayoutParams.MATCH_PARENT);
+        sp.setMargins(dp(14), 0, dp(14), 0);
+        pair.addView(sep, sp);
+        alertPanel = new ColourPanel(LedService.TARGET_ANIM, "Alertes", s.blinkHue, s.blinkSat, s.blinkPct);
+        pair.addView(alertPanel.view, weight(1, 0));
+        colours.addView(pair);
         setColoursLocked(true);
 
-        // ---- right: actions, rules, strip
+        // the iPhone page on the CarPlay Wi-Fi (0.25, owner 23 Nov): the link, little else (0.29)
+        LinearLayout phone = card(left, "Page iPhone");
+        bind("remote", toggle(phone, "Page web sur le Wi-Fi CarPlay", null,
+            s.remote, new Toggle() { public void set(Settings x, boolean v) { x.remote = v; } }));
+        LinearLayout urlRow = new LinearLayout(this);
+        urlRow.setGravity(Gravity.CENTER_VERTICAL);
+        urlRow.setBaselineAligned(false);
+        LinearLayout urlTexts = column();
+        remoteUrl = text("", 20, TEXT, true);
+        remoteUrl.setTextIsSelectable(true);
+        urlTexts.addView(remoteUrl);
+        remoteLine = text("", 13, MUTED, false);
+        urlTexts.addView(remoteLine);
+        urlRow.addView(urlTexts, weight(1, dp(10)));
+        Button newCode = pill("Nouveau code", false);
+        newCode.setPadding(dp(18), 0, dp(18), 0);
+        newCode.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                Settings.newRemoteCode(MainActivity.this);
+                LedService.send(MainActivity.this, LedService.ACTION_RELOAD);
+                Toast.makeText(MainActivity.this, "Nouveau code : l'ancien lien ne marche plus", Toast.LENGTH_LONG).show();
+            }
+        });
+        urlRow.addView(newCode);
+        phone.addView(urlRow);
+
+        // ---- right: actions, rules, debug
         LinearLayout actions = card(right, "Actions");
         LinearLayout row2 = new LinearLayout(this);
         // not aligned on the text's baseline: "Couleur permanente" on two lines sat lower (owner, 23 Nov)
         row2.setBaselineAligned(false);
         // test buttons: two per line, with names that say what they play (owner, 22 Nov)
         LinearLayout testRow = column(), t1 = new LinearLayout(this), t2 = new LinearLayout(this);
-        t1.addView(action("Animation d'allumage", LedService.ACTION_INTRO, true), weight(1, dp(8)));
-        t1.addView(action("Animation d'extinction", LedService.ACTION_EXIT, true), weight(1, 0));
-        t2.addView(action("Clignotement d'alerte", LedService.ACTION_TEST_BLINK, true), weight(1, dp(8)));
-        t2.addView(action("Animations à l'arrêt", LedService.ACTION_HOLD_TEST, true), weight(1, 0));
+        t1.addView(action("Allumage", LedService.ACTION_INTRO, true), weight(1, dp(8)));
+        t1.addView(action("Extinction", LedService.ACTION_EXIT, true), weight(1, 0));
+        t2.addView(action("Clignotement", LedService.ACTION_TEST_BLINK, true), weight(1, dp(8)));
+        t2.addView(action("Animation à l'arrêt", LedService.ACTION_HOLD_TEST, true), weight(1, 0));
         testRow.addView(t1);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -145,53 +173,33 @@ public final class MainActivity extends Activity {
         row2.addView(action("Couleur permanente", LedService.ACTION_DEFAULT, false), fill(weight(1.4f, 0)));
         actions.addView(row2);
         // the test buttons are hidden until "Tests" is pressed (owner, 22 Nov)
-        final Button tests = pill("Boutons de test ▸", false);
-        final LinearLayout tests1 = testRow;
-        tests1.setVisibility(View.GONE);
-        tests.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                boolean show = tests1.getVisibility() != View.VISIBLE;
-                tests1.setVisibility(show ? View.VISIBLE : View.GONE);
-                tests.setText(show ? "Boutons de test ▾" : "Boutons de test ▸");
-            }
-        });
-        LinearLayout.LayoutParams r2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        r2.topMargin = dp(8);
-        actions.addView(tests, r2);
-        LinearLayout.LayoutParams r1 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        r1.topMargin = dp(8);
-        actions.addView(testRow, r1);
+        actions.addView(folder("Tests", testRow), topMargin(8));
+        actions.addView(testRow, topMargin(8));
 
         LinearLayout rules = card(right, "Règles");
-        bind("intro", toggle(rules, "Animations ×3", "Allumage au déverrouillage, extinction au verrouillage (sinon allumé / éteint d'un coup)",
+        bind("intro", toggle(rules, "Animations ×3", "Au déverrouillage et au verrouillage",
             s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } }));
-        bind("holdAnim", toggle(rules, "Animation à l'arrêt",
-            "Arrêté en D (0 km/h) après avoir roulé, depuis 1 s : une fois sur N au hasard, une animation au hasard sur le tableau de bord, jusqu'au départ (le boîtier CAN ne transmet pas l'Auto Hold)",
+        bind("holdAnim", toggle(rules, "Animation à l'arrêt", "À 0 km/h en D, une fois sur N",
             s.holdAnim, new Toggle() { public void set(Settings x, boolean v) { x.holdAnim = v; } }));
-        bind("apFlash", toggle(rules, "Bleu à l'activation de l'Autosteer", "1 s dans le bleu de l'Autopilot de Binnacle, à la luminosité du moment",
+        bind("apFlash", toggle(rules, "Bleu à l'Autosteer", null,
             s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } }));
-        bind("reverseWhite", toggle(rules, "Blanc en marche arrière", "Un blanc qui respire, un peu plus fort que la couleur permanente, le temps de la marche arrière",
+        bind("reverseWhite", toggle(rules, "Blanc en marche arrière", null,
             s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } }));
         // one option for every opening (owner, 23 Nov: doors and boot/frunk were two switches)
-        bind("doorBlink", toggle(rules, "Alerte à l'ouverture",
-            "Le ruban clignote dans la couleur d'alerte quand une portière, le coffre ou le frunk s'ouvre",
+        bind("doorBlink", toggle(rules, "Alerte à l'ouverture", "Portières, coffre, frunk",
             s.doorBlink, new Toggle() { public void set(Settings x, boolean v) { x.doorBlink = v; x.bootAndFrunk = v; } }));
         bind("hazard", toggle(rules, "Clignoter avec les warnings", null,
             s.hazard, new Toggle() { public void set(Settings x, boolean v) { x.hazard = v; } }));
-        bind("autoPlay", toggle(rules, "Musique à la connexion CarPlay",
-            "Relance la dernière appli audio de l'iPhone (YouTube Music…) si rien ne joue 3 s après la connexion",
+        bind("autoPlay", toggle(rules, "Musique à la connexion CarPlay", null,
             s.autoPlay, new Toggle() { public void set(Settings x, boolean v) { x.autoPlay = v; } }));
         autoPlayLine = text("", 13, MUTED, false);
         rules.addView(autoPlayLine);
         // seeing the CarPlay app's media session needs notification access (Android's own screen)
-        autoPlayAccess = pill("Autoriser l'accès (notifications)", false);
+        autoPlayAccess = pill("Autoriser l'accès aux notifications", false);
         autoPlayAccess.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
-                Toast.makeText(MainActivity.this, "Activer Ruban LED dans la liste (aucune notification n'est lue)",
-                    Toast.LENGTH_LONG).show();
+                openOwnScreen(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+                Toast.makeText(MainActivity.this, "Activer Ruban LED dans la liste", Toast.LENGTH_LONG).show();
             }
         });
         rules.addView(autoPlayAccess);
@@ -199,50 +207,75 @@ public final class MainActivity extends Activity {
             s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } }));
         nightSummary = text(RemoteServer.nightText(s), 13, MUTED, false);
         rules.addView(nightSummary);
-        // the hours and brightness behind a button (owner, 23 Nov: too much room otherwise)
-        final Button nightBtn = pill("Horaires et luminosité ▸", false);
-        final LinearLayout nightBox = column();
-        nightBox.setVisibility(View.GONE);
-        nightBtn.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                boolean show = nightBox.getVisibility() != View.VISIBLE;
-                nightBox.setVisibility(show ? View.VISIBLE : View.GONE);
-                nightBtn.setText(show ? "Horaires et luminosité ▾" : "Horaires et luminosité ▸");
-            }
-        });
-        LinearLayout.LayoutParams nb = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        nb.topMargin = dp(6);
-        rules.addView(nightBtn, nb);
+        // every number behind one button (owner, 23 Nov: too much room otherwise)
+        LinearLayout tuning = column();
         LinearLayout n1 = new LinearLayout(this), n2 = new LinearLayout(this);
+        nightWinter = number(n2, "Nuit hiver (h)", s.nightStartWinter);
+        nightSummer = number(n2, "Nuit été (h)", s.nightStartSummer);
+        nightEnd = number(n2, "Fin nuit (h)", s.nightEnd);
+        nightPct = number(n2, "Nuit (%)", s.nightPct);
         blinkMs = number(n1, "Clignot. (ms)", s.blinkMs);
         blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
         repeat = number(n1, "Animations ×", s.animRepeat);
         holdChance = number(n1, "Arrêt : 1 sur", s.holdChance);
-        nightWinter = number(n2, "Début hiver (h)", s.nightStartWinter);
-        nightSummer = number(n2, "Début été (h)", s.nightStartSummer);
-        nightEnd = number(n2, "Fin (h)", s.nightEnd);
-        nightPct = number(n2, "Luminosité (%)", s.nightPct);
         // fields under a two-line label sat lower: no baseline alignment in these rows (owner, 23 Nov)
         for (LinearLayout r : new LinearLayout[] { n1, n2, t1, t2 }) r.setBaselineAligned(false);
-        nightBox.addView(n2);
-        Button nightSave = pill("Enregistrer les horaires", true);
-        nightSave.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { saveNight(); }
-        });
-        LinearLayout.LayoutParams ns = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        ns.topMargin = dp(8);
-        nightBox.addView(nightSave, ns);
-        rules.addView(nightBox);
-        rules.addView(n1);
+        tuning.addView(n2);
+        tuning.addView(n1);
+        tuning.addView(saveButton(), topMargin(8));
+        rules.addView(folder("Réglages", tuning), topMargin(6));
+        rules.addView(tuning);
 
-        // ---- journal (0.20): sent on demand, the steps and a progress bar shown here
-        LinearLayout journal = card(left, "Journaux (débogage)");  // left: the right column was much longer (owner, 23 Nov)
+        LinearLayout strip = card(left, "Ruban et application");
+        strip.addView(text("Adresse Bluetooth du ruban", 13, MUTED, false));
+        LinearLayout ad = new LinearLayout(this);
+        ad.setGravity(Gravity.CENTER_VERTICAL);
+        ad.setBaselineAligned(false);
+        address = new EditText(this);
+        address.setText(s.address);
+        address.setSingleLine(true);
+        address.setTextColor(TEXT);
+        address.setHint("AA:BB:CC:DD:EE:FF");
+        address.setHintTextColor(0xFF5F6770);
+        ad.addView(address, weight(1, dp(10)));
+        Button saveAddr = saveButton();
+        saveAddr.setPadding(dp(18), 0, dp(18), 0);
+        ad.addView(saveAddr);
+        strip.addView(ad);
+        LinearLayout r3 = new LinearLayout(this);
+        r3.setBaselineAligned(false);
+        Button update = pill("Mise à jour de l'app", false);
+        update.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { update(); }
+        });
+        animReset = pill("Animations d'origine", false);
+        animReset.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (Updater.animBusy) return;
+                Animations.reset(MainActivity.this);
+                Toast.makeText(MainActivity.this, "Animations d'origine remises", Toast.LENGTH_SHORT).show();
+                refreshAnimations();
+            }
+        });
+        r3.addView(update, weight(1, dp(8)));
+        r3.addView(animReset, weight(1, 0));
+        strip.addView(r3, topMargin(8));
+        updateText = text("", 13, MUTED, false);
+        updateText.setPadding(0, dp(8), 0, 0);
+        strip.addView(updateText);
+        animState = text("", 13, MUTED, false);
+        strip.addView(animState);
+        refreshAnimations();
+
+        // ---- debug (0.29): the journal and the last events, folded away until needed
+        LinearLayout debug = column();
+        right.addView(folder("Debug", debug));
+        right.addView(debug, topMargin(10));
+        LinearLayout journal = card(debug, "Journaux");
         journalState = text("", 13, MUTED, false);
         journal.addView(journalState);
         LinearLayout js = new LinearLayout(this);
-        send24 = pill("Envoyer les journaux (24 h)", true);
+        send24 = pill("Envoyer (24 h)", true);
         send24.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { sendLogs(24); }
         });
@@ -251,12 +284,9 @@ public final class MainActivity extends Activity {
             @Override public void onClick(View v) { sendLogs(0); }
         });
         js.setBaselineAligned(false);
-        js.addView(send24, weight(1.6f, dp(8)));
+        js.addView(send24, weight(1.4f, dp(8)));
         js.addView(sendAll, weight(1, 0));
-        LinearLayout.LayoutParams jsp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        jsp.topMargin = dp(8);
-        journal.addView(js, jsp);
+        journal.addView(js, topMargin(8));
         journalBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         journalBar.setMax(100);
         journalBar.setVisibility(View.GONE);
@@ -267,108 +297,21 @@ public final class MainActivity extends Activity {
         journalSteps.setTypeface(Typeface.MONOSPACE);
         journalSteps.setVisibility(View.GONE);
         journal.addView(journalSteps);
-        journal.addView(text("Avant d'envoyer : partage de connexion du téléphone, et « Journaux Ruban LED » activé dans Home Assistant (vue Tesla).",
-            13, MUTED, false));
-        bind("journalFull", toggle(journal, "Journal détaillé", "Chaque message CAN, chaque commande Bluetooth et réponse du ruban (sinon les lignes principales)",
+        journal.addView(text("Il faut Internet et « Journaux Ruban LED » activé dans Home Assistant.", 13, MUTED, false));
+        bind("journalFull", toggle(journal, "Journal détaillé", "Tout le CAN et le Bluetooth",
             s.journalFull, new Toggle() { public void set(Settings x, boolean v) { x.journalFull = v; } }));
         LinearLayout jc = new LinearLayout(this);
+        jc.setGravity(Gravity.BOTTOM);
+        jc.setBaselineAligned(false);
         journalCodes = number(jc, "Codes CAN en plus (ex. 2,3,4 ou 0-127)", 0);
         journalCodes.setText(s.journalCodes);
         journalCodes.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        Button saveCodes = saveButton();
+        saveCodes.setPadding(dp(18), 0, dp(18), 0);
+        jc.addView(saveCodes);
         journal.addView(jc);
 
-        // the iPhone page on the CarPlay Wi-Fi (0.25, owner 23 Nov)
-        LinearLayout phone = card(right, "Contrôle depuis l'iPhone");
-        bind("remote", toggle(phone, "Page web sur le Wi-Fi CarPlay",
-            "Pendant CarPlay, l'iPhone ouvre la même page dans Safari (à mettre en favori ou sur l'écran d'accueil). "
-                + "Seulement sur le Wi-Fi de CarPlay, jamais sur un autre réseau, et avec le code ci-dessous.",
-            s.remote, new Toggle() { public void set(Settings x, boolean v) { x.remote = v; } }));
-        remoteUrl = text("", 20, TEXT, true);
-        remoteUrl.setTextIsSelectable(true);
-        remoteUrl.setPadding(0, dp(8), 0, dp(2));
-        phone.addView(remoteUrl);
-        remoteLine = text("", 13, MUTED, false);
-        phone.addView(remoteLine);
-        Button newCode = pill("Nouveau code", false);
-        newCode.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                Settings.newRemoteCode(MainActivity.this);
-                LedService.send(MainActivity.this, LedService.ACTION_RELOAD);
-                Toast.makeText(MainActivity.this, "Nouveau code : l'ancienne adresse ne marche plus", Toast.LENGTH_LONG).show();
-            }
-        });
-        LinearLayout.LayoutParams nc = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        nc.topMargin = dp(8);
-        phone.addView(newCode, nc);
-
-        LinearLayout strip = card(right, "Ruban et application");
-        strip.addView(text("Adresse Bluetooth du ruban", 14, MUTED, false));
-        address = new EditText(this);
-        address.setText(s.address);
-        address.setSingleLine(true);
-        address.setTextColor(TEXT);
-        address.setHint("AA:BB:CC:DD:EE:FF");
-        address.setHintTextColor(0xFF5F6770);
-        strip.addView(address);
-        LinearLayout r3 = new LinearLayout(this);
-        Button save = pill("Enregistrer", true);
-        save.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { save(); }
-        });
-        Button update = pill("Mise à jour", false);
-        update.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { update(); }
-        });
-        r3.setBaselineAligned(false);
-        r3.addView(save, weight(1, dp(8)));
-        r3.addView(update, weight(1, 0));
-        strip.addView(r3);
-        updateText = text("Version " + Updater.installedVersion(this) + "  ·  github.com/" + Updater.REPO, 13, MUTED, false);
-        updateText.setPadding(0, dp(8), 0, 0);
-        strip.addView(updateText);
-
-        // ---- animations (0.28): only the animations file, from GitHub, without a new APK
-        LinearLayout anim = card(right, "Animations");
-        animState = text("", 13, MUTED, false);
-        anim.addView(animState);
-        LinearLayout ar = new LinearLayout(this);
-        animUpdate = pill("Mise à jour des animations", true);
-        animUpdate.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { updateAnimations(); }
-        });
-        animReset = pill("Animations d'origine", false);
-        animReset.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (Updater.animBusy) return;
-                Animations.reset(MainActivity.this);
-                Updater.animText = "✓ Animations d'origine remises (celles intégrées à l'app)";
-                refreshAnimations();
-                refreshUpdates();
-            }
-        });
-        ar.setBaselineAligned(false);
-        ar.addView(animUpdate, weight(1.6f, dp(8)));
-        ar.addView(animReset, weight(1, 0));
-        LinearLayout.LayoutParams arp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        arp.topMargin = dp(8);
-        anim.addView(ar, arp);
-        animBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        animBar.setMax(100);
-        animBar.setVisibility(View.GONE);
-        LinearLayout.LayoutParams abp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(14));
-        abp.topMargin = dp(10);
-        anim.addView(animBar, abp);
-        animSteps = text("", 14, TEXT, false);
-        animSteps.setTypeface(Typeface.MONOSPACE);
-        animSteps.setVisibility(View.GONE);
-        anim.addView(animSteps);
-        anim.addView(text("Ne télécharge que le fichier des animations (" + Updater.ANIM_PATH + " sur GitHub), sans réinstaller l'app. "
-            + "Il se prépare avec le simulateur du dépôt (dossier simulateur).", 13, MUTED, false));
-        refreshAnimations();
-
-        LinearLayout log = card(left, "Derniers événements");
+        LinearLayout log = card(debug, "Derniers événements");
         eventsLine = text("", 14, MUTED, false);
         eventsLine.setTypeface(Typeface.MONOSPACE);
         log.addView(eventsLine);
@@ -382,6 +325,24 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         main.post(refresh);
+        if (openedByOwner && !ownScreen) checkAnimationsOnce();
+        openedByOwner = false;
+        ownScreen = false;
+    }
+
+    @Override protected void onStop() {
+        super.onStop();
+        // left for another app: the next time it shows, the owner opened it again; unless the
+        // screen went dark (the car sleeps), or the app opened that screen itself
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        boolean screenOn = pm == null || pm.isInteractive();
+        if (screenOn && !ownScreen) openedByOwner = true;
+    }
+
+    /** One of Android's screens, opened by the app: coming back from it is not an opening. */
+    private void openOwnScreen(Intent i) {
+        ownScreen = true;
+        startActivity(i);
     }
 
     @Override protected void onPause() {
@@ -401,8 +362,7 @@ public final class MainActivity extends Activity {
         if (steadyPanel != null) steadyPanel.setLocked(l);
         if (alertPanel != null) alertPanel.setLocked(l);
         if (lockButton != null) {
-            lockButton.setText(l ? "🔒  Couleurs verrouillées : toucher pour modifier"
-                : "🔓  Modification possible : toucher pour verrouiller");
+            lockButton.setText(l ? "🔒  Modifier les couleurs" : "🔓  Verrouiller les couleurs");
         }
         main.removeCallbacks(relock);
         if (!l) main.postDelayed(relock, UNLOCK_MS);
@@ -419,37 +379,87 @@ public final class MainActivity extends Activity {
             linkLine.setText(link);
             dot(linkDot, ok ? OK : link.startsWith("Service") ? MUTED : WARN);
             stripLine.setText(LedService.stripText);
-            doorsLine.setText(LedService.doorsText + "   ·   " + LedService.feedText);
+            // the CAN app's state only when it is not the usual one (0.29)
+            String feed = LedService.feedText;
+            boolean feedOk = feed.isEmpty() || feed.contains("abonné");
+            doorsLine.setText(LedService.doorsText + "   ·   " + LedService.presenceText + (feedOk ? "" : "\n" + feed));
             String rule = LedService.ruleText;
             ruleLine.setText(rule);
             ruleLine.setVisibility(rule.isEmpty() ? View.GONE : View.VISIBLE);
-            presenceLine.setText(LedService.presenceText);
             eventsLine.setText(LedService.eventsText.isEmpty() ? "—" : LedService.eventsText);
-            autoPlayLine.setText(CarPlayAutoPlay.text);
+            String play = CarPlayAutoPlay.text.replace("Lecture auto CarPlay : ", "");
+            autoPlayLine.setText(play);
+            boolean access = CarPlayAutoPlay.hasAccess(MainActivity.this);
+            autoPlayLine.setVisibility(!access || play.isEmpty() || play.equals("désactivée") ? View.GONE : View.VISIBLE);
             if (seenChanges != RemoteServer.changes) {
                 seenChanges = RemoteServer.changes;
                 syncFromPhone();
             }
-            // the address to open on the iPhone, big, and whether it answers right now
+            // the link to open on the iPhone, big, and whether it answers right now
             boolean on = Settings.load(MainActivity.this).remote;
             String url = RemoteServer.url(MainActivity.this);
             remoteUrl.setText(url != null ? url : "Code " + Settings.remoteCode(MainActivity.this));
             remoteUrl.setAlpha(on ? 1f : 0.45f);
-            remoteLine.setText(!on ? "Désactivé : la page ne répond pas"
-                : RemoteServer.live ? "● Joignable maintenant depuis l'iPhone (Safari, connecté en CarPlay)"
-                : url != null ? "Joignable dès que l'iPhone est connecté en CarPlay (dernière adresse vue)"
-                : "L'adresse complète s'affiche à la première connexion de l'iPhone en CarPlay");
-            autoPlayAccess.setVisibility(CarPlayAutoPlay.hasAccess(MainActivity.this) ? View.GONE : View.VISIBLE);
+            remoteLine.setText(!on ? "Désactivée"
+                : RemoteServer.live ? "● iPhone connecté"
+                : url != null ? "Disponible quand l'iPhone est en CarPlay"
+                : "Le lien s'affiche à la première connexion CarPlay");
+            remoteLine.setTextColor(on && RemoteServer.live ? OK : MUTED);
+            autoPlayAccess.setVisibility(access ? View.GONE : View.VISIBLE);
             refreshJournal();
             refreshUpdates();
             main.postDelayed(this, Journal.sending || Updater.animBusy || Updater.appBusy ? 250 : 1000);
         }
     };
 
-    // ---- animations (0.28)
+    // ---- animations (0.28; header button, startup check and progress window since 0.29)
 
     private void updateAnimations() {
-        Updater.startAnimations(this);
+        if (!Updater.startAnimations(this)) { showAnimDialog(); return; }
+        refreshUpdates();
+    }
+
+    /** On opening: if GitHub has other animations than those in place, ask whether to take them. */
+    private void checkAnimationsOnce() {
+        Updater.checkAnimations(this, new Updater.AnimCheck() {
+            @Override public void onNewAnimations(final String sha, String when) {
+                if (isFinishing() || isDestroyed() || Updater.animBusy || (animDialog != null && animDialog.isShowing())) return;
+                if (sha.equals(getPreferences(MODE_PRIVATE).getString("animDeclined", ""))) return;
+                new AlertDialog.Builder(MainActivity.this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                    .setTitle("Nouvelles animations")
+                    .setMessage("Mettre à jour les animations ?" + (when.isEmpty() ? "" : "\n(version du " + when + ")"))
+                    .setPositiveButton("Mettre à jour", new DialogInterface.OnClickListener() {
+                        @Override public void onClick(DialogInterface d, int w) { updateAnimations(); }
+                    })
+                    .setNegativeButton("Plus tard", new DialogInterface.OnClickListener() {
+                        @Override public void onClick(DialogInterface d, int w) {
+                            // not asked again for this version: the button at the top stays there
+                            getPreferences(MODE_PRIVATE).edit().putString("animDeclined", sha).apply();
+                        }
+                    })
+                    .show();
+            }
+        });
+    }
+
+    /** The update's steps and progress bar, in a window over the screen. */
+    private void showAnimDialog() {
+        if (animDialog != null && animDialog.isShowing()) return;
+        if (isFinishing() || isDestroyed()) return;
+        LinearLayout box = column();
+        box.setPadding(dp(24), dp(12), dp(24), dp(4));
+        animBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        animBar.setMax(100);
+        box.addView(animBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(14)));
+        animSteps = text("", 16, TEXT, false);
+        animSteps.setLineSpacing(dp(4), 1f);
+        animSteps.setPadding(0, dp(10), 0, 0);
+        box.addView(animSteps);
+        animDialog = new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+            .setTitle("Mise à jour des animations")
+            .setView(box)
+            .setPositiveButton("Fermer", null)
+            .show();
         refreshUpdates();
     }
 
@@ -458,17 +468,18 @@ public final class MainActivity extends Activity {
      * read from Updater every refresh.
      */
     private boolean animWasBusy;
-    private String appShown = "";
+    private String appShown = null;
 
     private void refreshUpdates() {
         boolean busy = Updater.animBusy;
-        String steps = Updater.animText;
-        animSteps.setVisibility(steps.isEmpty() ? View.GONE : View.VISIBLE);
-        animSteps.setText(steps);
-        int pct = Updater.animPercent;
-        animBar.setVisibility(busy && pct != -1 ? View.VISIBLE : View.GONE);
-        animBar.setIndeterminate(pct == -2);
-        if (pct >= 0) animBar.setProgress(pct);
+        if (busy && !animWasBusy) showAnimDialog();      // also when started from the iPhone
+        if (animDialog != null && animDialog.isShowing()) {
+            animSteps.setText(Updater.animText.isEmpty() ? "…" : Updater.animText);
+            int pct = Updater.animPercent;
+            animBar.setVisibility(busy && pct != -1 ? View.VISIBLE : View.INVISIBLE);
+            animBar.setIndeterminate(pct == -2);
+            if (pct >= 0) animBar.setProgress(pct);
+        }
         animUpdate.setEnabled(!busy);
         animReset.setEnabled(!busy);
         animUpdate.setAlpha(busy ? 0.5f : 1f);
@@ -478,18 +489,23 @@ public final class MainActivity extends Activity {
         String app = Updater.appText;
         if (!app.equals(appShown)) {
             appShown = app;
-            updateText.setText(app.isEmpty() ? "Version " + Updater.installedVersion(this) + "  ·  github.com/" + Updater.REPO
+            updateText.setText(app.isEmpty() ? "Version " + versionName()
                 : app + (Updater.appPercent >= 0 ? "  (" + Updater.appPercent + " %)" : ""));
         }
     }
 
     private void refreshAnimations() {
-        Animations a = Animations.get(this);
-        StringBuilder names = new StringBuilder();
-        for (int k = 0; k < a.count(); k++) names.append(k == 0 ? "" : ", ").append(a.name(k));
-        animState.setText("En place : " + a.summary() + "\nÀ l'arrêt : " + names);
+        animState.setText("Animations : " + Animations.get(this).summary());
         boolean file = !Animations.installedSha(this).isEmpty();
         animReset.setVisibility(file ? View.VISIBLE : View.GONE);
+    }
+
+    private String versionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "" + Updater.installedVersion(this);
+        }
     }
 
     // ---- journal (0.20)
@@ -504,8 +520,7 @@ public final class MainActivity extends Activity {
 
     private void refreshJournal() {
         Journal j = Journal.get(this);
-        journalState.setText(j.configured() ? "Certificat installé · " + j.sizeText()
-            : "Certificat pas encore installé (par ADB, voir le README) · " + j.sizeText());
+        journalState.setText((j.configured() ? "Certificat installé" : "Certificat absent (à poser par ADB)") + " · " + j.sizeText());
         String steps = Journal.steps;
         journalSteps.setVisibility(steps.isEmpty() ? View.GONE : View.VISIBLE);
         journalSteps.setText(steps);
@@ -521,6 +536,7 @@ public final class MainActivity extends Activity {
 
     // ---- actions
 
+    /** Every field at once (address, numbers, night, CAN codes): one « Enregistrer » since 0.29. */
     private void save() {
         try {
             Settings s = Settings.load(this);
@@ -529,8 +545,13 @@ public final class MainActivity extends Activity {
             s.blinkMaxSec = clamp(num(blinkMax), 5, 3600);
             s.animRepeat = clamp(num(repeat), 1, 10);
             s.holdChance = clamp(num(holdChance), 1, 20);
+            s.nightStartWinter = clamp(num(nightWinter), 0, 23);
+            s.nightStartSummer = clamp(num(nightSummer), 0, 23);
+            s.nightEnd = clamp(num(nightEnd), 0, 23);
+            s.nightPct = clamp(num(nightPct), 1, 100);
             s.journalCodes = journalCodes.getText().toString().replaceAll("[^0-9,;\\- ]", "").trim();
             s.save(this);
+            nightSummary.setText(RemoteServer.nightText(s));
             LedService.send(this, LedService.ACTION_RELOAD);
             Toast.makeText(this, "Enregistré", Toast.LENGTH_SHORT).show();
         } catch (NumberFormatException e) {
@@ -538,31 +559,23 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** The night hours and brightness (their own button since 0.25). */
-    private void saveNight() {
-        try {
-            Settings s = Settings.load(this);
-            s.nightStartWinter = clamp(num(nightWinter), 0, 23);
-            s.nightStartSummer = clamp(num(nightSummer), 0, 23);
-            s.nightEnd = clamp(num(nightEnd), 0, 23);
-            s.nightPct = clamp(num(nightPct), 1, 100);
-            s.save(this);
-            nightSummary.setText(RemoteServer.nightText(s));
-            LedService.send(this, LedService.ACTION_RELOAD);
-            Toast.makeText(this, "Horaires enregistrés", Toast.LENGTH_SHORT).show();
-        } catch (NumberFormatException e) {
-            Toast.makeText(this, "Un nombre est invalide", Toast.LENGTH_SHORT).show();
-        }
+    private Button saveButton() {
+        Button b = pill("Enregistrer", true);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { save(); }
+        });
+        return b;
     }
 
     private void update() {
         if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
             // Android's own switch: Install unknown apps → Ruban LED
-            startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            openOwnScreen(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 android.net.Uri.parse("package:" + getPackageName())));
             Toast.makeText(this, "Autoriser « Installer des applis inconnues », puis réessayer", Toast.LENGTH_LONG).show();
             return;
         }
+        ownScreen = true;            // Android's install screen comes up on its own if there is a new version
         Updater.startApp(this);
         refreshUpdates();
     }
@@ -577,7 +590,7 @@ public final class MainActivity extends Activity {
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                startActivity(new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                openOwnScreen(new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                     android.net.Uri.parse("package:" + getPackageName())));
             }
         } catch (Throwable ignored) {
@@ -590,17 +603,53 @@ public final class MainActivity extends Activity {
 
     // ---- building blocks
 
+    /** Title, the strip's connection and, on the right, the animations update (0.29). */
     private LinearLayout header() {
         LinearLayout h = new LinearLayout(this);
         h.setGravity(Gravity.CENTER_VERTICAL);
+        h.setBaselineAligned(false);
         h.setPadding(dp(4), 0, 0, dp(12));
         ImageView icon = new ImageView(this);
         icon.setImageDrawable(getDrawable(R.mipmap.ic_launcher));
         h.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
         TextView t = text("Ruban LED", 26, TEXT, true);
-        t.setPadding(dp(12), 0, 0, 0);
+        t.setPadding(dp(12), 0, dp(28), 0);
         h.addView(t);
+        linkDot = new View(this);
+        h.addView(linkDot, new LinearLayout.LayoutParams(dp(12), dp(12)));
+        linkLine = text("", 17, TEXT, true);
+        linkLine.setPadding(dp(10), 0, dp(12), 0);
+        linkLine.setSingleLine(true);
+        linkLine.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        h.addView(linkLine, weight(1, 0));
+        animUpdate = pill("Mise à jour des animations", true);
+        animUpdate.setPadding(dp(22), 0, dp(22), 0);
+        animUpdate.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { updateAnimations(); }
+        });
+        h.addView(animUpdate);
         return h;
+    }
+
+    /** A « Name ▸ » button that shows or hides box (hidden at first). */
+    private Button folder(final String name, final View box) {
+        final Button b = pill(name + " ▸", false);
+        box.setVisibility(View.GONE);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                boolean show = box.getVisibility() != View.VISIBLE;
+                box.setVisibility(show ? View.VISIBLE : View.GONE);
+                b.setText(name + (show ? " ▾" : " ▸"));
+            }
+        });
+        return b;
+    }
+
+    private static LinearLayout.LayoutParams topMargin(int dpTop) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = Math.round(dpTop * android.content.res.Resources.getSystem().getDisplayMetrics().density);
+        return lp;
     }
 
     private LinearLayout column() {

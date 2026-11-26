@@ -12,7 +12,7 @@ la voiture ni au MCU.
 
 ## Captures (écran 1920×720 de l'A007)
 
-État du ruban et de la voiture, présence (verrouillage) et actions (depuis la 0.17, les boutons de test sont masqués sous « Boutons de test » : « Animation d'allumage », « Animation d'extinction », « Clignotement d'alerte », « Animations à l'arrêt », qui joue les 5 animations d'arrêt l'une après l'autre) :
+État du ruban et de la voiture, présence (verrouillage) et actions (les boutons de test sont masqués sous « Tests » : « Allumage », « Extinction », « Clignotement », « Animation à l'arrêt », qui joue les 5 animations d'arrêt l'une après l'autre ; captures d'avant la 0.29, textes depuis raccourcis) :
 
 ![État, présence et actions](docs/captures/1-etat-actions.png)
 
@@ -111,15 +111,17 @@ Documentation :
   aucune notification n'est lue. Validé le 17 nov. ; remplace une automatisation iOS peu fiable.
 - **Mode nuit**, activé par défaut : de 19 h (heure d'hiver) ou 21 h (heure d'été) à 7 h, tout le
   ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables sous le
-  bouton « Horaires et luminosité » (dans l'app et sur la page iPhone).
+  bouton « Réglages » de l'app (avec les autres nombres) et « Horaires et luminosité » sur la page iPhone.
 - **Deux couleurs** réglables dans l'app, chacune avec trois barres (teinte, saturation, luminosité) :
   couleur permanente, et couleur d'alerte (rouge 100 % par défaut, réservée aux portes, coffre, frunk et warnings).
-- Écran sombre en cartes : état, présence, couleurs, derniers événements (heure de chaque porte,
-  connexion du ruban… pour voir d'où vient un retard), actions, règles, ruban et mise à jour.
+- Écran sombre en cartes (0.29) : en haut la connexion au ruban et « Mise à jour des animations » ;
+  à gauche état, couleurs (côte à côte), page iPhone, ruban et application ; à droite actions,
+  règles et « Debug » replié (journaux et derniers événements : heure de chaque porte, connexion
+  du ruban… pour voir d'où vient un retard).
 
 ## Mise à jour des animations (0.28)
 
-Carte « Animations » : **« Mise à jour des animations »** télécharge seulement
+Bouton **« Mise à jour des animations »** en haut de l'écran (0.29 ; carte « Animations » en 0.28) : il télécharge seulement
 [`animations/animations.json`](animations/animations.json) depuis la branche `main` de ce dépôt,
 sans nouvelle APK. Ce fichier règle les animations à l'arrêt (minimum de la respiration, fond,
 traîne et durées du croisement et du centre, scintillement, vague) et peut en ajouter
@@ -130,8 +132,11 @@ permanente). Il se prépare avec le [simulateur](simulateur/README.md), qui l'ex
   commit du fichier), téléchargement avec sa barre (la version exacte de ce commit, jamais une copie
   en cache), vérification (format, valeurs dans leurs limites, nombre d'images), mise en place.
   « Déjà à jour » si ce fichier est déjà en place.
-- La carte dit ce qui est en place (« version 2 du … · 5 réglées + 1 enregistrée ») et la liste des
-  animations à l'arrêt. **« Animations d'origine »** revient à celles intégrées à l'app.
+- Les étapes s'affichent dans une fenêtre. Quand on ouvre soi-même l'app (Applis, applis récentes ou
+  notification ; pas au retour d'un écran d'Android ni au réveil de la voiture), si l'écran a Internet et que le fichier de GitHub n'est pas celui en place, une fenêtre propose
+  « Mettre à jour les animations ? » (« Plus tard » : plus redemandé pour ce fichier).
+- La carte « Ruban et application » dit ce qui est en place (« Animations : version 2 du … ») ;
+  **« Animations d'origine »** revient à celles intégrées à l'app.
 - Un fichier refusé ou abîmé laisse les animations en place. Le fichier est gardé dans le stockage
   privé de l'app (`files/animations.json`) ; sans lui, les valeurs intégrées (celles du fichier à la
   0.28).
@@ -158,7 +163,7 @@ chaque animation sa première image et une ligne de résumé (0.26) ; sinon
 seulement les données des règles et les commandes. **Codes CAN en plus** : `2,3,4` ou `0-127`,
 enregistrés tels quels (abonnement en lecture seule, comme les autres).
 
-**Envoi** : bouton « Envoyer les journaux (24 h) » ou « Tout (7 jours) ». Chaque étape s'affiche
+**Envoi** : sous « Debug » (0.29), bouton « Envoyer (24 h) » ou « Tout (7 jours) ». Chaque étape s'affiche
 (certificat, lecture, compression, connexion, envoi avec barre d'avancement, réponse), ✓ ou ✗ avec
 la raison. Le fichier part en `PUT` HTTPS, en gzip (20 Mo au plus, soit 150 à 200 Mo de texte, préparé dans un fichier
 temporaire et envoyé en flux ; au-delà, les jours les plus anciens sont retirés), avec en tête l'état de l'app, ses réglages (sans l'adresse du ruban) et son
@@ -169,7 +174,7 @@ tout cela n'est dans ce dépôt. Côté serveur, il suffit d'accepter un `PUT` s
 
 ## Contrôle depuis l'iPhone (0.25)
 
-Carte « Contrôle depuis l'iPhone », interrupteur « Page web sur le Wi-Fi CarPlay » (**activé par
+Carte « Page iPhone » (« Contrôle depuis l'iPhone » avant la 0.29), interrupteur « Page web sur le Wi-Fi CarPlay » (**activé par
 défaut**). En CarPlay sans fil, l'iPhone est connecté au Wi-Fi Direct que l'écran crée pour CarPlay :
 Ruban LED y sert une page web (port 8080) avec la même chose que son écran : état, actions et
 boutons de test, couleurs permanente et d'alerte, règles, derniers événements, et depuis la

@@ -70,7 +70,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     static volatile String linkText = "Service arrêté";
     static volatile String feedText = "";
     static volatile String doorsText = "Portes : inconnu";
-    static volatile String presenceText = "Présence : inconnue (en attente d'un verrouillage)";
+    static volatile String presenceText = "Verrouillage inconnu";
     static volatile String stripText = "Ruban : état inconnu";
     static volatile String ruleText = "";
     static volatile String eventsText = "";
@@ -229,7 +229,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             if (Intent.ACTION_SCREEN_ON.equals(i.getAction()) && Boolean.FALSE.equals(ownerThere)) {
                 ownerThere = null;
                 Settings.savePresence(LedService.this, null);
-                presenceText = "Présence : inconnue (en attente d'un verrouillage)";
+                presenceText = "Verrouillage inconnu";
             }
             if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
                 // the dash sleeps with the car: the strip (glovebox USB, powered while the car is
@@ -282,8 +282,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         // the lock state from before the restart (an update restarts the app)
         ownerThere = Settings.loadPresence(this);
         if (ownerThere != null) {
-            presenceText = "Présence : " + (ownerThere ? "déverrouillée (conducteur là)" : "verrouillée (absent)")
-                + " · état d'avant le redémarrage";
+            presenceText = (ownerThere ? "Voiture déverrouillée" : "Voiture verrouillée") + " (avant redémarrage)";
         }
         link = new LedLink(this, this);
         doors = new DoorFeed(this, this, logicThread.getLooper());
@@ -1005,7 +1004,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
 
     /** entrance: play the entrance animation now (false: the boot opened first, see onDoors). */
     private void onPresence(boolean there, String why, boolean entrance) {
-        presenceText = "Présence : " + (there ? "déverrouillée (conducteur là)" : "verrouillée (absent)");
+        presenceText = there ? "Voiture déverrouillée" : "Voiture verrouillée";
         if (ownerThere != null && ownerThere == there) return;
         ownerThere = there;
         Settings.savePresence(this, there);
