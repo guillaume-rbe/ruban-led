@@ -168,6 +168,39 @@ final class Settings {
      * (Europe/Paris) · nuit à 19 h · été le 28/03/2027 → 21 h". The change day is the first day
      * at noon whose summer time differs from now's.
      */
+    /**
+     * Whether the strip is in night mode right now (0.31, owner 27 Nov: that is what matters):
+     * "● Nuit en cours : ruban à 20 % jusqu'à 7 h, puis 60 % comme avant" or "Jour : luminosité
+     * normale, nuit à 19 h". The same test as the service's (nightNow, checked every minute).
+     * before: the strip's colour before the night (loadBeforeNight), null if none was seen.
+     */
+    String nightStateText(int[] before) {
+        if (!night) return "Mode nuit désactivé";
+        Calendar now = Calendar.getInstance();
+        if (isNight(now)) return "● Nuit en cours : ruban à " + nightPct + " % jusqu'à " + nightEnd + " h, puis "
+            + (before != null ? before[2] + " % comme avant" : dayPct + " %");
+        return "Jour : luminosité normale, nuit à " + nightStart(now) + " h";
+    }
+
+    /**
+     * The strip's colour and brightness when the night began (0.31, owner 27 Nov: after the night,
+     * the colour and % of before, not a default 100 %): hue, sat, pct, or null.
+     */
+    static int[] loadBeforeNight(Context ctx) {
+        SharedPreferences p = prefs(ctx);
+        int pct = p.getInt("beforeNightPct", -1);
+        if (pct < 1) return null;
+        return new int[] { p.getInt("beforeNightHue", 0), p.getInt("beforeNightSat", 0), pct };
+    }
+
+    static void saveBeforeNight(Context ctx, int hue, int sat, int pct) {
+        prefs(ctx).edit().putInt("beforeNightHue", hue).putInt("beforeNightSat", sat).putInt("beforeNightPct", pct).apply();
+    }
+
+    static void clearBeforeNight(Context ctx) {
+        prefs(ctx).edit().remove("beforeNightPct").apply();
+    }
+
     String clockText() {
         Calendar now = Calendar.getInstance();
         boolean summer = isSummerTime(now);
@@ -175,7 +208,7 @@ final class Settings {
         StringBuilder b = new StringBuilder(summer ? "Heure d'été" : "Heure d'hiver");
         b.append(" (").append(tz.getID());
         if (!tz.useDaylightTime()) b.append(", règle européenne");
-        b.append(") · nuit à ").append(nightStart(now)).append(" h");
+        b.append(")");
         Calendar d = (Calendar) now.clone();
         d.set(Calendar.HOUR_OF_DAY, 12);
         d.set(Calendar.MINUTE, 0);

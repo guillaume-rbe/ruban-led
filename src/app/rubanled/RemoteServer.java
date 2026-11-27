@@ -378,6 +378,7 @@ final class RemoteServer {
         }
         b.append("},");
         str(b, "night", nightText(s)).append(',');
+        str(b, "nightState", s.nightStateText(Settings.loadBeforeNight(ctx))).append(',');
         str(b, "clock", s.clockText()).append(',');
         b.append("\"nightVals\":[").append(s.nightStartWinter).append(',').append(s.nightStartSummer).append(',')
             .append(s.nightEnd).append(',').append(s.nightPct).append("],");

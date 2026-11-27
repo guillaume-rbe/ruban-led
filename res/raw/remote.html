@@ -140,7 +140,7 @@ const RULES = [
   ["intro", "Animations ×3", "Au déverrouillage et au verrouillage"],
   ["holdAnim", "Animation à l'arrêt", "À 0 km/h en D"],
   ["apFlash", "Bleu à l'Autosteer", ""],
-  ["reverseWhite", "Marche arrière", "Blanc, jaune → rouge si obstacle"],
+  ["reverseWhite", "Marche arrière", "Clignote, jaune → rouge selon les radars"],
   ["doorBlink", "Alerte à l'ouverture", "Portières, coffre, frunk"],
   ["hazard", "Clignoter avec les warnings", ""],
   ["autoPlay", "Musique à la connexion CarPlay", ""],
@@ -282,7 +282,7 @@ async function refresh() {
       if (Date.now() - switches[k].editedAt > 3000) switches[k].box.checked = !!s.rules[k];
     }
     switches.night.sub.style.whiteSpace = "pre-line";
-    switches.night.sub.textContent = s.night + "\n" + s.clock;
+    switches.night.sub.textContent = s.nightState + "\n" + s.night + "\n" + s.clock;
     const focused = ["nw", "ns", "ne", "np"].includes(document.activeElement && document.activeElement.id);
     if (!focused && Date.now() - nightEditedAt > 60000) {
       [$("nw").value, $("ns").value, $("ne").value, $("np").value] = s.nightVals;

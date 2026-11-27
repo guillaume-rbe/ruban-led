@@ -183,7 +183,7 @@ public final class MainActivity extends Activity {
             s.holdAnim, new Toggle() { public void set(Settings x, boolean v) { x.holdAnim = v; } }));
         bind("apFlash", toggle(rules, "Bleu à l'Autosteer", null,
             s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } }));
-        bind("reverseWhite", toggle(rules, "Marche arrière", "Blanc, jaune → rouge si obstacle",
+        bind("reverseWhite", toggle(rules, "Marche arrière", "Clignote, jaune → rouge selon les radars",
             s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } }));
         // one option for every opening (owner, 23 Nov: doors and boot/frunk were two switches)
         bind("doorBlink", toggle(rules, "Alerte à l'ouverture", "Portières, coffre, frunk",
@@ -370,8 +370,12 @@ public final class MainActivity extends Activity {
         @Override public void run() { setColoursLocked(true); }
     };
 
+    private int refreshCount;
+
     private final Runnable refresh = new Runnable() {
         @Override public void run() {
+            // night or day can change on its own: the line under « Mode nuit » every 15 s
+            if (refreshCount++ % 15 == 0) nightSummary.setText(nightLines(Settings.load(MainActivity.this)));
             String link = LedService.linkText;
             boolean ok = "Ruban connecté".equals(link);
             linkLine.setText(link);
@@ -493,8 +497,8 @@ public final class MainActivity extends Activity {
     }
 
     /** The night hours, then the summer / winter time as the app sees it (0.30). */
-    private static String nightLines(Settings s) {
-        return RemoteServer.nightText(s) + "\n" + s.clockText();
+    private String nightLines(Settings s) {
+        return s.nightStateText(Settings.loadBeforeNight(this)) +"\n" + RemoteServer.nightText(s) + "\n" + s.clockText();
     }
 
     private void refreshAnimations() {

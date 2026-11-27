@@ -26,7 +26,7 @@ dépôt : version … ». Sans serveur, « Ouvrir un fichier… » fait la même
 ## L'utiliser
 
 - Un bouton par animation de l'app : **Allumage**, **Extinction** (3 fois chacune, comme dans
-  l'app), **Alerte porte** (clignotement rouge, 6 s), **Marche arrière** (blanc qui respire),
+  l'app), **Alerte porte** (clignotement rouge, 6 s), **Marche arrière** (clignotement jaune → ambre → orange → rouge, approche simulée),
   **Autosteer** (bleu 1 s), **Recharge** (jauge à 62 %), puis les animations à l'arrêt :
   **Respiration lente**, **Croisement**, **Du centre vers les bouts**, **Scintillement**, **Vague
   de couleur** (10 s chacune, avec leur fondu d'entrée et de sortie, comme le test de l'app).
@@ -84,7 +84,7 @@ la branche `main` de ce dépôt.
 |---|---|---|
 | `image_ms` | délai entre deux images des animations à l'arrêt | 40 à 1000 |
 | `arret.une_fois_sur` | l'animation se joue à 1 arrêt sur N (1 = à chaque arrêt) — app 0.30 | 1 à 20 |
-| `marche_arriere.rouge_a`, `jaune_a` | niveau du radar arrière le plus proche (1 = tout près … 10) : rouge à `rouge_a` et en dessous, jaune à `jaune_a` et au-dessus, dégradé entre les deux ; sans obstacle, blanc qui respire — app 0.30 | 1 à 10, `jaune_a` > `rouge_a` |
+| `marche_arriere.rouge_a`, `jaune_a` | niveau du radar arrière le plus proche (1 = tout près … 10) : rouge à `rouge_a` et en dessous, jaune à `jaune_a` et au-dessus, ambre puis orange entre les deux ; sans obstacle, jaune ; toujours en clignotement, plus rapide à l'approche — app 0.31 | 1 à 10, `jaune_a` > `rouge_a` |
 | `respiration.min` | luminosité au creux du souffle, en % de la luminosité du moment | 0 à 100 |
 | `respiration.souffle_s` | durée d'un souffle | 0,5 à 60 s |
 | `croisement` / `centre` : `fond` | luminosité du ruban hors des lumières qui bougent (0 = éteint) | 0 à 100 % |

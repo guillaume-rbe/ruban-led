@@ -140,7 +140,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
      */
     private boolean autoHoldOn;
     private boolean apFlash;
-    /** In reverse, and the reverse white is showing. */
+    /** In reverse, and the reverse blink is showing. */
     private boolean inReverse, reverseLit;
     private static final int AP_HUE = 212, AP_SAT = 88;
     private static final long AP_FLASH_MS = 1000;
@@ -538,6 +538,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         settings.defaultSat = Math.max(0, Math.min(100, sat));
         settings.dayPct = Math.max(1, Math.min(100, pct));
         settings.save(this);
+        Settings.clearBeforeNight(this);      // a new colour chosen: that one in the morning
         if (busy()) return;      // the animation ends on the new colour
         if (strip == null || !strip.on) power(true);
         colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
@@ -547,7 +548,15 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private void steady() {
         // power first: "on" after a colour puts the strip back to white
         if (strip == null || !strip.on) power(true);
-        colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
+        int[] before = settings.nightNow() ? null : Settings.loadBeforeNight(this);
+        if (before != null) {
+            // the first steady colour after the night: the one of before (0.31)
+            Settings.clearBeforeNight(this);
+            event("Fin de nuit : couleur d'avant remise (" + before[2] + " %)");
+            colour(before[0], before[1], before[2], true);
+        } else {
+            colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
+        }
         main.removeCallbacks(introFinal);
         // a second time: if a frame was lost, the strip must not stay half lit
         main.postDelayed(introFinal, 700);
@@ -561,7 +570,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
      */
     private void afterAnimation() {
         trace("après animation : " + (away() ? "verrouillée → éteint" : charging ? "recharge → jauge"
-            : inReverse && settings.reverseWhite ? "marche arrière → blanc" : !screenIsOn && ownerThere == null ? "écran éteint → éteint" : "couleur permanente"));
+            : inReverse && settings.reverseWhite ? "marche arrière → clignotement" : !screenIsOn && ownerThere == null ? "écran éteint → éteint" : "couleur permanente"));
         ruleText = "";
         if (away()) {
             ruleText = "Voiture verrouillée : ruban éteint";
@@ -570,7 +579,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         }
         if (charging) { showGauge(); return; }
         if (inReverse && settings.reverseWhite && screenIsOn) {
-            showReverse();                   // still in reverse (a door blinked): white again
+            showReverse();                   // still in reverse (a door blinked): its blink again
             if (reverseLit) return;
         }
         if (!screenIsOn && ownerThere == null) {
@@ -642,7 +651,9 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable introFinal = new Runnable() {
         @Override public void run() {
             if (busy() || away()) return;
-            colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
+            // the colour steady() just sent (the one of before the night, the morning after)
+            if (strip != null && strip.hasColour) colour(strip.hue, strip.sat, strip.val, true);
+            else colour(settings.defaultHue, settings.defaultSat, targetPct(), true);
         }
     };
 
@@ -771,6 +782,11 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         @Override public void run() {
             boolean night = settings.nightNow();
             if (lastNight == null || night != lastNight) {
+                // day -> night: remember the strip's colour and % to put them back in the morning
+                if (lastNight != null && night && strip != null && strip.on && strip.hasColour && strip.val > 0) {
+                    Settings.saveBeforeNight(LedService.this, strip.hue, strip.sat, strip.val);
+                    event("Nuit : couleur d'avant gardée (" + strip.val + " %)");
+                }
                 lastNight = night;
                 if (settings.night) brightnessPending = true;
             }
@@ -789,6 +805,17 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         if (strip == null) return;     // wait for the strip to tell us its colour
         brightnessPending = false;
         int pct = targetPct();
+        int[] before = settings.nightNow() ? null : Settings.loadBeforeNight(this);
+        if (before != null) {
+            // morning: the colour and the % of before the night, as they were (0.31); strip off
+            // (car asleep): kept for the next steady colour
+            if (strip.on) {
+                Settings.clearBeforeNight(this);
+                colour(before[0], before[1], before[2], true);
+                event("Fin de nuit : couleur d'avant remise (" + before[2] + " %)");
+            }
+            return;
+        }
         if (strip.on && strip.hasColour && strip.val != pct) {
             colour(strip.hue, strip.sat, pct, true);
             Log.i(TAG, "brightness " + pct + "%");
@@ -1133,7 +1160,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         }
     };
 
-    /** Reverse gear (code 11 gear = 1): a breathing white while it lasts, then the usual colour. */
+    /** Reverse gear (code 11 gear = 1): a yellow to red blink while it lasts, then the usual colour. */
     @Override public void onGear(int gear) {
         boolean r = gear == 1;
         if (r == inReverse) return;
@@ -1143,46 +1170,51 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         else if (reverseLit) { reverseLit = false; main.removeCallbacks(reverseTick); afterAnimation(); }
     }
 
-    /** Reverse breathing: one cycle, from the white down to REVERSE_LOW of it and back (owner, 23 Nov). */
-    private static final long REVERSE_PERIOD_MS = 2000, REVERSE_FRAME_MS = 120;
-    private static final double REVERSE_LOW = 0.15;
-    private int reverseWhite, reverseFrame;
+    /**
+     * Reverse (0.31, owner 27 Nov: no more white): the strip always blinks, in steps from yellow
+     * to red as the closest rear sensor (code 4) gets nearer, and faster:
+     * nothing seen or level >= reverseFar: yellow; then amber, orange; level <= reverseNear: red.
+     */
+    private static final int[] REVERSE_HUES = { 55, 38, 18, 0 };
+    private static final String[] REVERSE_NAMES = { "jaune", "ambre", "orange", "rouge" };
+    /** Half a blink (on, then off) per step, in ms. */
+    private static final long[] REVERSE_HALF_MS = { 500, 350, 220, 120 };
+    private int reverseBright, reverseStep = -1;
+    private boolean reversePhase;
+    private long reverseTicks;
     /** Closest rear sensor (code 4), 1 closest .. 10; -1 nothing seen. */
     private volatile int rearLevel = -1;
-    /** Hue (degrees) when the obstacle is far, and the last reverse colour sent (not resent each frame). */
-    private static final int REVERSE_YELLOW = 55;
-    private int reverseSentHue = -1;
 
-    /** Code 4: in reverse, the strip goes from yellow to red as the obstacle gets closer (0.30). */
+    /** Code 4: in reverse, the step follows the closest obstacle (0.30). */
     @Override public void onRearSensor(int level) {
         rearLevel = level;
         if (inReverse) trace("radar arrière : " + (level < 0 ? "rien" : "niveau " + level));
     }
 
-    /** The reverse hue for this sensor level, -1 for nothing seen (the white breathing). */
-    private int reverseHue(int level) {
-        if (level <= 0) return -1;
+    /** The step for this sensor level: 0 yellow (nothing or far) .. 3 red (close). */
+    private int reverseStep(int level) {
         Animations a = Animations.get(this);
-        double f = (double) (level - a.reverseNear) / Math.max(1, a.reverseFar - a.reverseNear);
-        f = Math.max(0, Math.min(1, f));
-        return (int) Math.round(REVERSE_YELLOW * f);
+        if (level <= 0 || level >= a.reverseFar) return 0;
+        if (level <= a.reverseNear) return 3;
+        double mid = (a.reverseNear + a.reverseFar) / 2.0;
+        return level > mid ? 1 : 2;
     }
 
-    /** The reverse white, breathing, if wanted and nothing else is playing. */
+    /** The reverse blink, if wanted and nothing else is playing. */
     private void showReverse() {
-        trace("marche arrière : blanc" + (busy() && !reverseLit ? " refusé (" + busyWhy() + ")" : ""));
+        trace("marche arrière : clignotement" + (busy() && !reverseLit ? " refusé (" + busyWhy() + ")" : ""));
         if (!inReverse || !settings.reverseWhite || !link.isReady() || !present() || !screenIsOn
                 || (busy() && !reverseLit)) return;
         int pct = targetPct();
-        int white = Math.min(100, Math.max(pct + 30, Math.round(pct * 1.5f)));   // 20 % at night: 50 %
+        int bright = Math.min(100, Math.max(pct + 30, Math.round(pct * 1.5f)));   // 20 % at night: 50 %
         if (strip == null || !strip.on) power(true);
         boolean was = reverseLit;
         reverseLit = true;
-        reverseWhite = white;
-        ruleText = "Marche arrière : blanc (respiration)";
-        if (was) return;                     // already breathing
-        reverseFrame = 0;
-        reverseSentHue = -1;                 // the obstacle colour is sent again at once
+        reverseBright = bright;
+        if (was) return;                     // already blinking
+        reverseStep = -1;
+        reversePhase = false;
+        reverseTicks = 0;
         main.removeCallbacks(reverseTick);
         main.post(reverseTick);
     }
@@ -1190,24 +1222,16 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable reverseTick = new Runnable() {
         @Override public void run() {
             if (!reverseLit) return;
-            double t = (reverseFrame * REVERSE_FRAME_MS % REVERSE_PERIOD_MS) / (double) REVERSE_PERIOD_MS;
-            double level = REVERSE_LOW + (1 - REVERSE_LOW) * (0.5 + 0.5 * Math.cos(2 * Math.PI * t));
-            if (reverseFrame % 50 == 0) awake(10000);
-            int hue = reverseHue(rearLevel);
-            if (hue >= 0) {
-                // an obstacle: steady, yellow far .. red close; sent when it changes (and now and then)
-                if (link.isReady() && (hue != reverseSentHue || reverseFrame % 10 == 0)) {
-                    colour(hue, 100, reverseWhite, false);
-                    reverseSentHue = hue;
-                }
-                ruleText = "Marche arrière : obstacle (niveau " + rearLevel + ")";
-            } else {
-                if (reverseSentHue >= 0) ruleText = "Marche arrière : blanc (respiration)";
-                reverseSentHue = -1;
-                if (link.isReady()) colour(0, 0, Math.max(1, (int) Math.round(reverseWhite * level)), false);
+            int step = reverseStep(rearLevel);
+            if (step != reverseStep) {
+                reverseStep = step;
+                ruleText = "Marche arrière : " + REVERSE_NAMES[step] + (rearLevel > 0 ? " (niveau " + rearLevel + ")" : "");
+                reversePhase = false;          // a new step starts lit at once
             }
-            reverseFrame++;
-            main.postDelayed(this, REVERSE_FRAME_MS);
+            reversePhase = !reversePhase;
+            if (reverseTicks++ % 20 == 0) awake(10000);
+            if (link.isReady()) colour(REVERSE_HUES[step], 100, reversePhase ? reverseBright : 1, false);
+            main.postDelayed(this, REVERSE_HALF_MS[step]);
         }
     };
 

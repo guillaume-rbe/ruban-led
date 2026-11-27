@@ -2,6 +2,12 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.31
+
+- **Marche arrière sans blanc** : le ruban clignote toujours, par paliers jaune → ambre → orange → rouge selon le radar arrière le plus proche, de plus en plus vite à l'approche (jaune sans obstacle).
+- **Après la nuit, la couleur et la luminosité d'avant** : au début de la nuit, l'app retient la couleur et le % du ruban, et les remet tels quels à la fin de la nuit (ou au prochain allumage si le ruban était éteint), au lieu d'une valeur par défaut.
+- **Mode nuit en cours ou non**, en première ligne sous « Mode nuit » (écran et iPhone) : « ● Nuit en cours : ruban à 20 % jusqu'à 7 h, puis 60 % comme avant » ou « Jour : luminosité normale, nuit à 19 h ». La ligne se met à jour toute seule (toutes les 15 s sur l'écran). Dessous, les horaires, puis l'heure d'été ou d'hiver et la date du prochain changement.
+
 ## 0.30
 
 - **Animation à l'arrêt à chaque arrêt** (c'était 1 fois sur 4). La fréquence se règle maintenant dans le **fichier des animations** (`arret.une_fois_sur`), donc avec « Mise à jour des animations », sans nouvelle version de l'app ; le champ « Arrêt : 1 sur » a disparu des réglages.

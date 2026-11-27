@@ -64,12 +64,13 @@ Documentation :
   d'habitude (l'animation d'allumage s'arrête si elle tournait) et l'animation d'allumage est
   gardée pour la première portière ouverte (dans les 15 min), à la place du clignotement.
 - **Marche arrière** (option, activée par défaut) : tant que la marche arrière est passée (code 11
-  `gear` = 1). **Avec un obstacle** vu par les radars arrière (code 4, 0.30), couleur fixe du
-  **jaune au rouge** selon le radar le plus proche : jaune au niveau 8 et au-delà, rouge au niveau 2
-  et en dessous (1 = tout près ; seuils dans le fichier des animations). **Sans obstacle**, un blanc qui respire (de 15 % à 100 % du blanc et retour, toutes les 2 s), ce blanc
-  étant un peu plus fort que la couleur permanente (+30 points, ×1,5 au moins ; 50 % la nuit), puis
-  la couleur habituelle. Une porte qui s'ouvre clignote quand même, et le blanc
-  revient après si la marche arrière est toujours passée.
+  `gear` = 1), le ruban **clignote toujours** (0.31 : plus de blanc), par **paliers du jaune au
+  rouge** selon le radar arrière le plus proche (code 4), de plus en plus vite : **jaune** sans
+  obstacle ou au niveau 8 et au-delà (500 ms allumé / 500 ms éteint), **ambre** puis **orange**
+  entre les deux (350 et 220 ms), **rouge** au niveau 2 et en dessous (120 ms) ; 1 = tout près,
+  seuils dans le fichier des animations. Allumé un peu plus fort que la couleur permanente
+  (+30 points, ×1,5 au moins ; 50 % la nuit), puis la couleur habituelle. Une porte qui s'ouvre
+  clignote quand même en rouge d'alerte, et le clignotement de la marche arrière revient après.
 - **Autosteer** (option, activée par défaut) : à son activation (code 9 `autodrivermode`), 1 s dans
   le bleu de l'Autopilot de Binnacle (teinte 212°, saturation 88 %) à la luminosité du moment, puis
   la couleur permanente. Le régulateur seul (TACC) et le limiteur n'ont pas de champ dans le flux
@@ -115,11 +116,16 @@ Documentation :
   (bouton dans la carte « Règles ») : c'est ce qui permet de voir la session média d'une autre app ;
   aucune notification n'est lue. Validé le 17 nov. ; remplace une automatisation iOS peu fiable.
 - **Mode nuit**, activé par défaut : de 19 h (heure d'hiver) ou 21 h (heure d'été) à 7 h, tout le
-  ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables sous le
+  ruban (couleur permanente, animations, jauge) à 20 %. **Au début de la nuit, l'app retient la
+  couleur et le % du ruban, et les remet tels quels à la fin de la nuit** (0.31), au lieu de la
+  luminosité par défaut ; ruban éteint à ce moment-là : au prochain allumage. Choisir une nouvelle
+  couleur permanente pendant la nuit remplace celle retenue. Heures et luminosité réglables sous le
   bouton « Réglages » de l'app (avec les autres nombres) et « Horaires et luminosité » sur la page iPhone.
-  Sous « Mode nuit », l'app et la page iPhone montrent l'heure vue par l'app (0.30) : heure d'été ou
-  d'hiver, fuseau, heure de début de la nuit ce soir et date du prochain changement, par exemple
-  « Heure d'hiver (Europe/Paris) · nuit à 19 h · été le 28/03/2027 → 21 h ».
+  Sous « Mode nuit », l'app et la page iPhone disent d'abord **si le ruban est en mode nuit en ce
+  moment** (0.31, mis à jour toutes les 15 s) : « ● Nuit en cours : ruban à 20 % jusqu'à 7 h, puis
+  60 % comme avant » ou « Jour : luminosité normale, nuit à 19 h » ; puis les horaires, et l'heure vue par l'app (0.30) : heure
+  d'été ou d'hiver, fuseau et date du prochain changement, par exemple
+  « Heure d'hiver (Europe/Paris) · été le 28/03/2027 → 21 h ».
 - **Deux couleurs** réglables dans l'app, chacune avec trois barres (teinte, saturation, luminosité) :
   couleur permanente, et couleur d'alerte (rouge 100 % par défaut, réservée aux portes, coffre, frunk et warnings).
 - Écran sombre en cartes (0.29) : en haut la connexion au ruban et « Mise à jour des animations » ;
