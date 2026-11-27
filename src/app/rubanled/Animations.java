@@ -41,6 +41,16 @@ final class Animations {
     double twinkleBg = 0, twinkleChance = 0.03, twinkleDecay = 0.7;
     /** Vague de couleur: hue swing (degrees) and seconds per wave. */
     double waveSwing = 50, waveS = 4;
+    /**
+     * The stop animation plays one stop in holdEvery (0.30, owner 27 Nov: every time, and set by the
+     * animations update rather than in the app; it was "Arrêt : 1 sur 4" in the settings).
+     */
+    int holdEvery = 1;
+    /**
+     * Reverse with an obstacle (0.30): the closest rear sensor level (1 closest .. 10) at or above
+     * reverseFar is yellow, at or below reverseNear red, in between from yellow to red.
+     */
+    int reverseNear = 2, reverseFar = 8;
     /** Recorded animations: name, frame period, and per frame the 15 dashboard levels (0-100). */
     final List<Recorded> recorded = new ArrayList<>();
 
@@ -120,6 +130,14 @@ final class Animations {
         a.date = o.optString("date", "");
         a.description = o.optString("description", "");
         a.frameMs = (long) range(o, "image_ms", a.frameMs, 40, 1000);
+        JSONObject h = o.optJSONObject("arret");
+        if (h != null) a.holdEvery = (int) range(h, "une_fois_sur", a.holdEvery, 1, 20);
+        JSONObject ra = o.optJSONObject("marche_arriere");
+        if (ra != null) {
+            a.reverseNear = (int) range(ra, "rouge_a", a.reverseNear, 1, 10);
+            a.reverseFar = (int) range(ra, "jaune_a", a.reverseFar, 1, 10);
+            if (a.reverseFar <= a.reverseNear) throw new Exception("marche arrière : « jaune_a » doit être plus grand que « rouge_a »");
+        }
         JSONObject r = o.optJSONObject("respiration");
         if (r != null) {
             a.breathMin = range(r, "min", a.breathMin * 100, 0, 100) / 100;
@@ -197,10 +215,15 @@ final class Animations {
         return kind < HoldShow.NAMES.length ? HoldShow.NAMES[kind] : recorded.get(kind - HoldShow.NAMES.length).name;
     }
 
+    /** "à chaque arrêt" or "1 arrêt sur 3". */
+    String holdText() {
+        return holdEvery <= 1 ? "à chaque arrêt" : "1 arrêt sur " + holdEvery;
+    }
+
     /** One line for the screen: "version 2 du 2026-11-25 · 5 réglées + 1 enregistrée". */
     String summary() {
-        if (version == 0 && date.isEmpty()) return "d'origine";
-        return "version " + version + (date.isEmpty() ? "" : " du " + date);
+        if (version == 0 && date.isEmpty()) return "d'origine · arrêt " + holdText();
+        return "version " + version + (date.isEmpty() ? "" : " du " + date) + " · arrêt " + holdText();
     }
 
     private static byte[] read(File f) throws Exception {

@@ -67,6 +67,8 @@ la branche `main` de ce dépôt.
   "date": "2026-11-25",
   "description": "ce qui change, affiché dans l'app",
   "image_ms": 150,
+  "arret": { "une_fois_sur": 1 },
+  "marche_arriere": { "rouge_a": 2, "jaune_a": 8 },
   "respiration": { "min": 5, "souffle_s": 5 },
   "croisement": { "fond": 0, "traine": 0.07, "trajet_s": 3.2, "pause_s": 0.6 },
   "centre": { "fond": 0, "traine": 0.07, "trajet_s": 1.8, "pause_s": 0.6 },
@@ -81,6 +83,8 @@ la branche `main` de ce dépôt.
 | Clé | Sens | Limites |
 |---|---|---|
 | `image_ms` | délai entre deux images des animations à l'arrêt | 40 à 1000 |
+| `arret.une_fois_sur` | l'animation se joue à 1 arrêt sur N (1 = à chaque arrêt) — app 0.30 | 1 à 20 |
+| `marche_arriere.rouge_a`, `jaune_a` | niveau du radar arrière le plus proche (1 = tout près … 10) : rouge à `rouge_a` et en dessous, jaune à `jaune_a` et au-dessus, dégradé entre les deux ; sans obstacle, blanc qui respire — app 0.30 | 1 à 10, `jaune_a` > `rouge_a` |
 | `respiration.min` | luminosité au creux du souffle, en % de la luminosité du moment | 0 à 100 |
 | `respiration.souffle_s` | durée d'un souffle | 0,5 à 60 s |
 | `croisement` / `centre` : `fond` | luminosité du ruban hors des lumières qui bougent (0 = éteint) | 0 à 100 % |
@@ -92,5 +96,5 @@ la branche `main` de ce dépôt.
 | `vague.ecart`, `vague.periode_s` | écart de teinte autour de la couleur permanente, période | 0 à 180°, 0,5 à 60 s |
 | `enregistrees` | au plus 20, chacune 1 à 2000 images de 15 niveaux (0 à 100, segment 1 = bout droit) | |
 
-L'allumage, l'extinction, l'alerte, la marche arrière, l'Autosteer et la jauge ne sont pas dans le
+L'allumage, l'extinction, l'alerte, l'Autosteer, la jauge et les couleurs de la marche arrière ne sont pas dans le
 fichier : les changer demande encore une nouvelle version de l'app.

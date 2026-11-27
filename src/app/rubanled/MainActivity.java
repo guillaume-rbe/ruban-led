@@ -51,7 +51,7 @@ public final class MainActivity extends Activity {
     private TextView linkLine, stripLine, doorsLine, ruleLine, updateText, eventsLine, autoPlayLine, animState;
     private Button autoPlayAccess;
     private View linkDot;
-    private EditText address, blinkMs, blinkMax, repeat, holdChance, nightWinter, nightSummer, nightEnd, nightPct, journalCodes;
+    private EditText address, blinkMs, repeat, nightWinter, nightSummer, nightEnd, nightPct, journalCodes;
     /** Journal (0.20), under « Debug » since 0.29: certificate state, upload steps and progress. */
     private TextView journalState, journalSteps;
     private ProgressBar journalBar;
@@ -179,11 +179,11 @@ public final class MainActivity extends Activity {
         LinearLayout rules = card(right, "Règles");
         bind("intro", toggle(rules, "Animations ×3", "Au déverrouillage et au verrouillage",
             s.intro, new Toggle() { public void set(Settings x, boolean v) { x.intro = v; } }));
-        bind("holdAnim", toggle(rules, "Animation à l'arrêt", "À 0 km/h en D, une fois sur N",
+        bind("holdAnim", toggle(rules, "Animation à l'arrêt", "À 0 km/h en D",
             s.holdAnim, new Toggle() { public void set(Settings x, boolean v) { x.holdAnim = v; } }));
         bind("apFlash", toggle(rules, "Bleu à l'Autosteer", null,
             s.apFlash, new Toggle() { public void set(Settings x, boolean v) { x.apFlash = v; } }));
-        bind("reverseWhite", toggle(rules, "Blanc en marche arrière", null,
+        bind("reverseWhite", toggle(rules, "Marche arrière", "Blanc, jaune → rouge si obstacle",
             s.reverseWhite, new Toggle() { public void set(Settings x, boolean v) { x.reverseWhite = v; } }));
         // one option for every opening (owner, 23 Nov: doors and boot/frunk were two switches)
         bind("doorBlink", toggle(rules, "Alerte à l'ouverture", "Portières, coffre, frunk",
@@ -205,7 +205,7 @@ public final class MainActivity extends Activity {
         rules.addView(autoPlayAccess);
         bind("night", toggle(rules, "Mode nuit", null,
             s.night, new Toggle() { public void set(Settings x, boolean v) { x.night = v; } }));
-        nightSummary = text(RemoteServer.nightText(s), 13, MUTED, false);
+        nightSummary = text(nightLines(s), 13, MUTED, false);
         rules.addView(nightSummary);
         // every number behind one button (owner, 23 Nov: too much room otherwise)
         LinearLayout tuning = column();
@@ -215,9 +215,7 @@ public final class MainActivity extends Activity {
         nightEnd = number(n2, "Fin nuit (h)", s.nightEnd);
         nightPct = number(n2, "Nuit (%)", s.nightPct);
         blinkMs = number(n1, "Clignot. (ms)", s.blinkMs);
-        blinkMax = number(n1, "Durée max (s)", s.blinkMaxSec);
         repeat = number(n1, "Animations ×", s.animRepeat);
-        holdChance = number(n1, "Arrêt : 1 sur", s.holdChance);
         // fields under a two-line label sat lower: no baseline alignment in these rows (owner, 23 Nov)
         for (LinearLayout r : new LinearLayout[] { n1, n2, t1, t2 }) r.setBaselineAligned(false);
         tuning.addView(n2);
@@ -494,6 +492,11 @@ public final class MainActivity extends Activity {
         }
     }
 
+    /** The night hours, then the summer / winter time as the app sees it (0.30). */
+    private static String nightLines(Settings s) {
+        return RemoteServer.nightText(s) + "\n" + s.clockText();
+    }
+
     private void refreshAnimations() {
         animState.setText("Animations : " + Animations.get(this).summary());
         boolean file = !Animations.installedSha(this).isEmpty();
@@ -542,16 +545,14 @@ public final class MainActivity extends Activity {
             Settings s = Settings.load(this);
             s.address = address.getText().toString().trim().toUpperCase();
             s.blinkMs = clamp(num(blinkMs), 150, 5000);
-            s.blinkMaxSec = clamp(num(blinkMax), 5, 3600);
             s.animRepeat = clamp(num(repeat), 1, 10);
-            s.holdChance = clamp(num(holdChance), 1, 20);
             s.nightStartWinter = clamp(num(nightWinter), 0, 23);
             s.nightStartSummer = clamp(num(nightSummer), 0, 23);
             s.nightEnd = clamp(num(nightEnd), 0, 23);
             s.nightPct = clamp(num(nightPct), 1, 100);
             s.journalCodes = journalCodes.getText().toString().replaceAll("[^0-9,;\\- ]", "").trim();
             s.save(this);
-            nightSummary.setText(RemoteServer.nightText(s));
+            nightSummary.setText(nightLines(s));
             LedService.send(this, LedService.ACTION_RELOAD);
             Toast.makeText(this, "Enregistré", Toast.LENGTH_SHORT).show();
         } catch (NumberFormatException e) {
@@ -736,7 +737,7 @@ public final class MainActivity extends Activity {
                 steadyPanel.show(s.defaultHue, s.defaultSat, s.dayPct);
                 alertPanel.show(s.blinkHue, s.blinkSat, s.blinkPct);
             }
-            nightSummary.setText(RemoteServer.nightText(s));
+            nightSummary.setText(nightLines(s));
             if (!nightWinter.hasFocus() && !nightSummer.hasFocus() && !nightEnd.hasFocus() && !nightPct.hasFocus()) {
                 nightWinter.setText("" + s.nightStartWinter);
                 nightSummer.setText("" + s.nightStartSummer);

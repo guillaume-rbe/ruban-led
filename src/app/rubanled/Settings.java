@@ -24,13 +24,12 @@ final class Settings {
     int blinkSat;
     int blinkPct;
     int blinkMs;
-    int blinkMaxSec;
     boolean intro;
     /** How many times the entrance / exit animations play (owner, 16 Nov: 3). */
     int animRepeat;
     /**
-     * Auto Hold (owner, 22 Nov): after 1 s held at a standstill, one time in holdChance (drawn at
-     * random) an animation picked at random plays on the dashboard until the car moves off.
+     * Auto Hold (owner, 22 Nov): after 1 s held at a standstill, one time in Animations.holdEvery
+     * (drawn at random; animations.json since 0.30, every stop by default) an animation picked at random plays on the dashboard until the car moves off.
      */
     boolean holdAnim;
     /** Autosteer turned on: the strip flashes Binnacle's Autopilot blue for 1 s (owner, 22 Nov). */
@@ -52,7 +51,6 @@ final class Settings {
      */
     boolean journalFull;
     String journalCodes;
-    int holdChance;
     /**
      * Night mode, on by default (owner, 16 Nov): from nightStartWinter (19 h) in winter time and
      * nightStartSummer (21 h) in summer time until nightEnd (7 h), everything at nightPct (20 %).
@@ -79,7 +77,6 @@ final class Settings {
         s.blinkSat = p.getInt("blinkSat", 100);
         s.blinkPct = p.getInt("blinkPct", 100);
         s.blinkMs = p.getInt("blinkMs", 400);
-        s.blinkMaxSec = p.getInt("blinkMaxSec", 120);
         s.intro = p.getBoolean("intro", true);
         s.animRepeat = p.getInt("animRepeat", 3);
         s.holdAnim = p.getBoolean("holdAnim", true);
@@ -90,7 +87,6 @@ final class Settings {
         s.remote = p.getBoolean("remote", true);
         s.journalFull = p.getBoolean("journalFull", true);
         s.journalCodes = p.getString("journalCodes", "");
-        s.holdChance = p.getInt("holdChance", 4);
         // new keys in 0.5 so the new defaults (on, 20 %) apply to installs that had it off
         s.night = p.getBoolean("night5", true);
         s.nightStartWinter = p.getInt("nightStartWinter", 19);
@@ -114,7 +110,6 @@ final class Settings {
             .putInt("blinkSat", blinkSat)
             .putInt("blinkPct", blinkPct)
             .putInt("blinkMs", blinkMs)
-            .putInt("blinkMaxSec", blinkMaxSec)
             .putBoolean("intro", intro)
             .putInt("animRepeat", animRepeat)
             .putBoolean("holdAnim", holdAnim)
@@ -125,7 +120,6 @@ final class Settings {
             .putBoolean("remote", remote)
             .putBoolean("journalFull", journalFull)
             .putString("journalCodes", journalCodes)
-            .putInt("holdChance", holdChance)
             .putBoolean("night5", night)
             .putInt("nightStartWinter", nightStartWinter)
             .putInt("nightStartSummer", nightStartSummer)
@@ -167,6 +161,35 @@ final class Settings {
         int day = c.get(Calendar.DAY_OF_MONTH);
         int lastSunday = lastSunday(c);
         return month == Calendar.MARCH ? day >= lastSunday : day < lastSunday;
+    }
+
+    /**
+     * For the screen (0.30, owner 27 Nov: to see that the summer time is picked up): "Heure d'hiver
+     * (Europe/Paris) · nuit à 19 h · été le 28/03/2027 → 21 h". The change day is the first day
+     * at noon whose summer time differs from now's.
+     */
+    String clockText() {
+        Calendar now = Calendar.getInstance();
+        boolean summer = isSummerTime(now);
+        TimeZone tz = now.getTimeZone();
+        StringBuilder b = new StringBuilder(summer ? "Heure d'été" : "Heure d'hiver");
+        b.append(" (").append(tz.getID());
+        if (!tz.useDaylightTime()) b.append(", règle européenne");
+        b.append(") · nuit à ").append(nightStart(now)).append(" h");
+        Calendar d = (Calendar) now.clone();
+        d.set(Calendar.HOUR_OF_DAY, 12);
+        d.set(Calendar.MINUTE, 0);
+        for (int i = 0; i < 400; i++) {
+            d.add(Calendar.DAY_OF_MONTH, 1);
+            if (isSummerTime(d) != summer) {
+                b.append(" · ").append(summer ? "hiver" : "été").append(" le ")
+                    .append(String.format(java.util.Locale.FRANCE, "%02d/%02d/%d", d.get(Calendar.DAY_OF_MONTH),
+                        d.get(Calendar.MONTH) + 1, d.get(Calendar.YEAR)))
+                    .append(" → ").append(summer ? nightStartWinter : nightStartSummer).append(" h");
+                break;
+            }
+        }
+        return b.toString();
     }
 
     private static int lastSunday(Calendar c) {

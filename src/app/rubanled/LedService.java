@@ -64,6 +64,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private static final String CHANNEL = "ruban2";
     private static final long NIGHT_CHECK_MS = 30000;
     private static final long TEST_BLINK_SEC = 6;
+    /** Door blink: held while open (doorAlertHeld), then this long at most once all are closed. */
+    private static final long DOOR_BLINK_SEC = 3;
+    /** Hazards: they keep the blink going as long as they flash; this only bounds a lost "off". */
+    private static final long HAZARD_BLINK_SEC = 120;
     private static final long WATCHDOG_MS = 15 * 60 * 1000L;
 
     // shown by MainActivity
@@ -130,7 +134,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private static final int GAUGE_FILL_FRAMES = 22, GAUGE_HOLD_FRAMES = 4, GAUGE_GAP_FRAMES = 3;
 
     /**
-     * Auto Hold (owner, 22 Nov): held for HOLD_DELAY_MS, one time in settings.holdChance (random)
+     * Auto Hold (owner, 22 Nov): held for HOLD_DELAY_MS, one time in Animations.holdEvery (random)
      * one of the HoldShow animations, picked at random (never twice in a row), plays until the car
      * moves off. It fades in from the steady colour and back to it when the hold ends.
      */
@@ -668,15 +672,26 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private final Runnable blinkTick = new Runnable() {
         @Override public void run() {
             if (!blinking) return;
-            if (!hazardOn && SystemClock.elapsedRealtime() > blinkUntil) {
+            if (!hazardOn && !doorAlertHeld() && SystemClock.elapsedRealtime() > blinkUntil) {
                 stopBlink();
                 return;
             }
+            if (++blinkCount % 10 == 0) awake(10000);     // held as long as a door stays open
             blinkPhase = !blinkPhase;
             colour(settings.blinkHue, settings.blinkSat, blinkPhase ? animPct() : 1, false);
             main.postDelayed(this, Math.max(150, settings.blinkMs));
         }
     };
+
+    private int blinkCount;
+
+    /**
+     * A door, the boot or the frunk is open: the alert blinks until it is closed (0.30, owner
+     * 27 Nov: there was a time limit, « Durée max »), except while charging (no alert then).
+     */
+    private boolean doorAlertHeld() {
+        return doorsOpen && settings.doorBlink && !charging;
+    }
 
     /** Stop blinking: the steady colour (or off / the gauge, see afterAnimation). */
     private void stopBlink() {
@@ -956,6 +971,18 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         boolean open = (v & mask) != 0;
         doorsText = "Portes : " + (v == 0 ? "fermées" : describe(v));
         doorsOpen = open;
+        if (charging) {
+            // charging (0.30, owner 27 Nov: the boot or a door is open to plug in): no alert, the
+            // green gauge stays; a door still tells that the owner is there
+            if (opened != 0) {
+                event(describe(opened) + " (recharge : pas d'alerte)");
+                if (away() && (opened & 0xf0) != 0) onPresence(true, "Ouverture voiture verrouillée", false);
+                doorSinceArrival = true;
+                introOwed = false;
+            }
+            if (!gauge && !intro && !exiting) showGauge();
+            return;
+        }
         if (opened != 0) {
             event(describe(opened));
             boolean door = (opened & 0xf0) != 0;      // a door, not only the boot / frunk
@@ -990,7 +1017,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 return;
             }
             // otherwise always the alert blink (owner, 17 Nov)
-            if (settings.doorBlink) startBlink(settings.blinkMaxSec);
+            if (settings.doorBlink) startBlink(DOOR_BLINK_SEC);
             else if (introOwed) { stopAll(); steady(); }      // no blink wanted: lit, entrance later
         } else if (!open && !hazardOn) {
             stopBlink();
@@ -1042,10 +1069,10 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         flashes++;
         main.removeCallbacks(burstEnd);
         main.postDelayed(burstEnd, BURST_END_MS);
-        if (flashes < HAZARD_FLASHES || hazardOn || !settings.hazard || away()) return;
+        if (flashes < HAZARD_FLASHES || hazardOn || !settings.hazard || away() || charging) return;
         hazardOn = true;
         event("Warnings");
-        startBlink(settings.blinkMaxSec);
+        startBlink(HAZARD_BLINK_SEC);
         ruleText = "Warnings : clignotement";
         main.removeCallbacks(hazardCheck);
         main.postDelayed(hazardCheck, 500);
@@ -1120,6 +1147,26 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
     private static final long REVERSE_PERIOD_MS = 2000, REVERSE_FRAME_MS = 120;
     private static final double REVERSE_LOW = 0.15;
     private int reverseWhite, reverseFrame;
+    /** Closest rear sensor (code 4), 1 closest .. 10; -1 nothing seen. */
+    private volatile int rearLevel = -1;
+    /** Hue (degrees) when the obstacle is far, and the last reverse colour sent (not resent each frame). */
+    private static final int REVERSE_YELLOW = 55;
+    private int reverseSentHue = -1;
+
+    /** Code 4: in reverse, the strip goes from yellow to red as the obstacle gets closer (0.30). */
+    @Override public void onRearSensor(int level) {
+        rearLevel = level;
+        if (inReverse) trace("radar arrière : " + (level < 0 ? "rien" : "niveau " + level));
+    }
+
+    /** The reverse hue for this sensor level, -1 for nothing seen (the white breathing). */
+    private int reverseHue(int level) {
+        if (level <= 0) return -1;
+        Animations a = Animations.get(this);
+        double f = (double) (level - a.reverseNear) / Math.max(1, a.reverseFar - a.reverseNear);
+        f = Math.max(0, Math.min(1, f));
+        return (int) Math.round(REVERSE_YELLOW * f);
+    }
 
     /** The reverse white, breathing, if wanted and nothing else is playing. */
     private void showReverse() {
@@ -1135,6 +1182,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         ruleText = "Marche arrière : blanc (respiration)";
         if (was) return;                     // already breathing
         reverseFrame = 0;
+        reverseSentHue = -1;                 // the obstacle colour is sent again at once
         main.removeCallbacks(reverseTick);
         main.post(reverseTick);
     }
@@ -1145,7 +1193,19 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
             double t = (reverseFrame * REVERSE_FRAME_MS % REVERSE_PERIOD_MS) / (double) REVERSE_PERIOD_MS;
             double level = REVERSE_LOW + (1 - REVERSE_LOW) * (0.5 + 0.5 * Math.cos(2 * Math.PI * t));
             if (reverseFrame % 50 == 0) awake(10000);
-            if (link.isReady()) colour(0, 0, Math.max(1, (int) Math.round(reverseWhite * level)), false);
+            int hue = reverseHue(rearLevel);
+            if (hue >= 0) {
+                // an obstacle: steady, yellow far .. red close; sent when it changes (and now and then)
+                if (link.isReady() && (hue != reverseSentHue || reverseFrame % 10 == 0)) {
+                    colour(hue, 100, reverseWhite, false);
+                    reverseSentHue = hue;
+                }
+                ruleText = "Marche arrière : obstacle (niveau " + rearLevel + ")";
+            } else {
+                if (reverseSentHue >= 0) ruleText = "Marche arrière : blanc (respiration)";
+                reverseSentHue = -1;
+                if (link.isReady()) colour(0, 0, Math.max(1, (int) Math.round(reverseWhite * level)), false);
+            }
             reverseFrame++;
             main.postDelayed(this, REVERSE_FRAME_MS);
         }
@@ -1171,7 +1231,8 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 trace("Auto Hold : pas d'animation, " + (charging ? "recharge" : inReverse ? "marche arrière" : busyWhy()));
                 return;
             }
-            int chance = Math.max(1, settings.holdChance);
+            // how often: in animations.json since 0.30 (every stop by default, owner 27 Nov)
+            int chance = Math.max(1, Animations.get(LedService.this).holdEvery);
             if (rnd.nextInt(chance) != 0) {
                 event("Auto Hold : pas d'animation cette fois (1 sur " + chance + ")");
                 return;
@@ -1266,11 +1327,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
                 return;
             }
             hazardOn = false;
-            if (doorsOpen && settings.doorBlink) {
-                blinkUntil = SystemClock.elapsedRealtime() + settings.blinkMaxSec * 1000L;   // the door blink goes on
-            } else {
-                stopBlink();
-            }
+            if (!doorAlertHeld()) stopBlink();            // a door still open: the door blink goes on
         }
     };
 
@@ -1280,6 +1337,16 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         charging = chg;
         event(charging ? "Recharge" : "Fin de recharge");
         if (charging) {
+            if (blinking) {
+                // a door or the boot blinking red (open to plug in): straight to the green gauge
+                blinking = false;
+                hazardOn = false;
+                main.removeCallbacks(blinkTick);
+                main.removeCallbacks(hazardCheck);
+                link.clearQueue();
+                afterAnimation();
+                return;
+            }
             showGauge();
         } else if (gauge) {
             gauge = false;
@@ -1420,7 +1487,7 @@ public final class LedService extends Service implements LedLink.Listener, DoorF
         return "couleur T" + s.defaultHue + " S" + s.defaultSat + " " + s.dayPct + "%, alerte T" + s.blinkHue + " " + s.blinkPct + "%"
             + ", nuit " + (s.night ? s.nightStartWinter + "h/" + s.nightStartSummer + "h-" + s.nightEnd + "h " + s.nightPct + "%" : "non")
             + ", animations " + (s.intro ? "×" + s.animRepeat : "non") + ", ouvertures " + s.doorBlink
-            + ", warnings " + s.hazard + ", arrêt " + (s.holdAnim ? "1/" + s.holdChance : "non") + ", autosteer " + s.apFlash
+            + ", warnings " + s.hazard + ", arrêt " + (s.holdAnim ? "1/" + Animations.get(this).holdEvery : "non") + ", autosteer " + s.apFlash
             + ", marche arrière " + s.reverseWhite + ", écran position appareil " + s.unitQuiet + ", iPhone " + s.remote + ", commande courte " + s.shortColour
             + ", musique CarPlay " + s.autoPlay + ", journal " + (s.journalFull ? "détaillé" : "normal")
             + (s.journalCodes == null || s.journalCodes.isEmpty() ? "" : " codes+ " + s.journalCodes);

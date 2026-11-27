@@ -1,7 +1,7 @@
 # Données de la voiture utilisées (relevés du 16 et 17 novembre 2026)
 
 Tout est lu **en lecture seule** auprès de l'app CAN d'origine de l'écran (`com.xbs.canapp`) :
-abonnement (`regPropIdList`) aux codes 15, 9, 10 et 11, désabonnement (`unregPropIdList`), rien d'autre.
+abonnement (`regPropIdList`) aux codes 15, 9, 10, 11 et 4 (depuis la 0.30), désabonnement (`unregPropIdList`), rien d'autre.
 Rien n'est envoyé à la voiture ni au MCU. Les relevés ont été faits avec l'enregistreur (« logger »)
 de [Binnacle](https://github.com/lotech/binnacle), qui écrit tous les codes 0 à 127.
 
@@ -16,6 +16,7 @@ de [Binnacle](https://github.com/lotech/binnacle), qui écrit tous les codes 0 �
 | 9 | `autodrivermode` | `true` pendant l'Autosteer (vérifié par Binnacle le 28 oct.) | 1 s de bleu à l'activation |
 | 10 | `carspeed` | km/h | arrêt en D après avoir roulé = Auto Hold (animation à l'arrêt) |
 | 11 | `gear` | 0 = P, 1 = R, 3 = D (vérifié par Binnacle) | blanc en marche arrière |
+| 4 | `rl`, `rml`, `rmr`, `rr` | radars arrière, niveau 1 (tout près) à 10, 255 = rien (3 à 6 et 255 vus le 23 nov.) | jaune → rouge en marche arrière (0.30) |
 | 11 | `jhmail`, `batterylevel` | voir `Battery.java` (table de Binnacle) | pourcentage de batterie |
 
 ## Verrouillage et déverrouillage (17 nov.)

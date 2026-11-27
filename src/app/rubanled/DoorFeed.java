@@ -17,7 +17,7 @@ import android.util.Log;
 /**
  * Door state from the stock CAN app (com.xbs.canapp), READ-ONLY, the same way Binnacle's CanFeed
  * does it: the only binder calls are IMcuService transaction 1 (regPropIdList) and 2
- * (unregPropIdList), for codes 15, 9, 11 and 10. Nothing is ever sent to the MCU or the car.
+ * (unregPropIdList), for codes 15, 9, 11, 10 and 4. Nothing is ever sent to the MCU or the car.
  *
  * Code 15, key "doorval": 0x80 driver, 0x40 passenger, 0x20 rear right, 0x10 rear left,
  * 0x08 boot, 0x04 frunk. Code 9, keys "leftlight" / "rightlight": the indicators, 1 = lit,
@@ -41,10 +41,15 @@ final class DoorFeed {
         void onAutosteer(boolean on);
         /** Code 11 "gear": 0 Park, 1 Reverse, 3 Drive (Binnacle, verified); when it changes. */
         void onGear(int gear);
+        /**
+         * Code 4: the closest rear parking sensor (rl, rml, rmr, rr), 1 = closest .. 10, -1 when
+         * none sees anything (255 or 0, as Binnacle reads them; 3-6 seen in the car on 23 Nov).
+         */
+        void onRearSensor(int level);
     }
 
     /** The codes the rules read: doors, lights, battery, speed (stops in Drive). */
-    private static final int[] CODES = {15, 9, 11, 10};
+    private static final int[] CODES = {15, 9, 11, 10, 4};
     /**
      * Subscribed: CODES plus the extra ones asked for in the app, for the journal only (0.20:
      * any CAN code can be recorded without a new build). Still read-only.
@@ -62,7 +67,11 @@ final class DoorFeed {
     private static final String SVC_ACTION = "com.xbs.canapp.action.mcuservice";
     private static final String SVC_PKG = "com.xbs.canapp";
     private static final int TX_REGISTER = 1, TX_UNREGISTER = 2;
-    private static final int CODE_DOORS = 15, CODE_LIGHTS = 9, CODE_BATTERY = 11, CODE_SPEED = 10;
+    private static final int CODE_DOORS = 15, CODE_LIGHTS = 9, CODE_BATTERY = 11, CODE_SPEED = 10,
+        CODE_REAR = 4;
+    private static final String[] REAR_KEYS = {"rl", "rml", "rmr", "rr"};
+    private final int[] rear = {255, 255, 255, 255};
+    private int rearClosest = -1;
     private static final long RETRY_MS = 5000;
 
     private final Context ctx;
@@ -150,6 +159,15 @@ final class DoorFeed {
                             speed = num(b, "carspeed", speed);
                             stopCheck();
                         }
+                        return;
+                    }
+                    if (msg.what == CODE_REAR) {
+                        int c = -1;
+                        for (int i = 0; i < 4; i++) {
+                            rear[i] = num(b, REAR_KEYS[i], rear[i]);
+                            if (rear[i] > 0 && rear[i] < 255 && (c < 0 || rear[i] < c)) c = rear[i];
+                        }
+                        if (c != rearClosest) { rearClosest = c; DoorFeed.this.listener.onRearSensor(c); }
                         return;
                     }
                     if (msg.what == CODE_BATTERY) {
@@ -240,7 +258,7 @@ final class DoorFeed {
      * MANOEUVRE_ARM_KMH (24 Nov: every speed message made 15 500 of the journal's 22 800 lines).
      */
     private void journalCan(int code, Bundle b) {
-        boolean rules = code == CODE_DOORS || code == CODE_LIGHTS || code == CODE_BATTERY;
+        boolean rules = code == CODE_DOORS || code == CODE_LIGHTS || code == CODE_BATTERY || code == CODE_REAR;
         if (!rules && !journal.full()) return;            // code 10 (speed) and extra codes: full journal only
         StringBuilder s = new StringBuilder();
         java.util.TreeSet<String> keys = new java.util.TreeSet<>(b.keySet());

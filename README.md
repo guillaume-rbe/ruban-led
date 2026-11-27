@@ -6,7 +6,7 @@ vendu sous les noms Carview, Tesery…) qui pilote en Bluetooth LE un ruban LED 
 
 Elle tourne à côté de [Binnacle](https://github.com/lotech/binnacle) (tableau de bord de remplacement
 pour cet écran) mais n'en dépend pas : elle lit elle-même les portes, les feux et la batterie,
-**en lecture seule**, auprès de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9 et 11, seules
+**en lecture seule**, auprès de l'app CAN d'origine (`com.xbs.canapp`, codes 15, 9, 11, 10 et 4, seules
 transactions `regPropIdList`/`unregPropIdList`, comme le `CanFeed` de Binnacle). Rien n'est envoyé à
 la voiture ni au MCU.
 
@@ -57,13 +57,16 @@ Documentation :
   L'extinction fait l'inverse. Interrupteur « Animations ×3 » : sans lui, allumé / éteint d'un coup.
 - **Alerte à l'ouverture** (une seule option depuis la 0.25) : chaque porte, coffre ou frunk qui s'ouvre (même si une autre est déjà
   ouverte, et même conducteur à bord) fait clignoter le ruban (couleur d'alerte, rouge par défaut,
-  100 % ↔ 1 %, 400 ms, 2 min max).
+  100 % ↔ 1 %, 400 ms) **jusqu'à ce que tout soit refermé** (0.30 : plus de durée maximale).
+  Pas d'alerte pendant la recharge (voir Recharge).
 - **Coffre d'abord en arrivant** : si en arrivant (déverrouillage, ou voiture encore vue
   verrouillée) le coffre ou le frunk s'ouvre avant toute portière, il clignote en rouge comme
   d'habitude (l'animation d'allumage s'arrête si elle tournait) et l'animation d'allumage est
   gardée pour la première portière ouverte (dans les 15 min), à la place du clignotement.
 - **Marche arrière** (option, activée par défaut) : tant que la marche arrière est passée (code 11
-  `gear` = 1), un blanc qui respire (de 15 % à 100 % du blanc et retour, toutes les 2 s), ce blanc
+  `gear` = 1). **Avec un obstacle** vu par les radars arrière (code 4, 0.30), couleur fixe du
+  **jaune au rouge** selon le radar le plus proche : jaune au niveau 8 et au-delà, rouge au niveau 2
+  et en dessous (1 = tout près ; seuils dans le fichier des animations). **Sans obstacle**, un blanc qui respire (de 15 % à 100 % du blanc et retour, toutes les 2 s), ce blanc
   étant un peu plus fort que la couleur permanente (+30 points, ×1,5 au moins ; 50 % la nuit), puis
   la couleur habituelle. Une porte qui s'ouvre clignote quand même, et le blanc
   revient après si la marche arrière est toujours passée.
@@ -81,12 +84,14 @@ Documentation :
   fixe au milieu du tableau de bord, aussi large que le % (50 % = la moitié du tableau de bord),
   et de chaque bout un remplissage vert qui court vers elle, en boucle (~5 s). Sur les portes,
   c'est un remplissage de l'arrière vers l'avant qui finit dans la barre (à l'avant de la porte) ;
-  à 100 % tout est vert fixe.
+  à 100 % tout est vert fixe. Dès que la recharge commence, le clignotement rouge d'une porte ou du
+  coffre ouvert pour brancher s'arrête et la jauge démarre ; pendant la recharge, portes, coffre et
+  warnings ne déclenchent aucune alerte (0.30).
 - **Animation à l'arrêt** (option, activée par défaut) : quand la voiture est arrêtée en D
   (`carspeed` = 0) après avoir roulé, comme au feu en Auto Hold (le boîtier CAN ne transmet pas
   l'Auto Hold : `autohandlight` est le frein de parking), depuis plus d'**1 s**. Après une marche
-  arrière (manœuvres), un arrêt ne compte qu'une fois repartie au-dessus de 15 km/h. Alors, une
-  fois sur 4 au hasard (réglable : « Arrêt : 1 sur »), une animation tirée au hasard (jamais deux
+  arrière (manœuvres), un arrêt ne compte qu'une fois repartie au-dessus de 15 km/h. Alors, **à
+  chaque arrêt** (0.30 ; réglable dans le fichier des animations : `arret.une_fois_sur`), une animation tirée au hasard (jamais deux
   fois la même de suite) dans la couleur permanente, dessinée pour le tableau de bord, jusqu'au
   départ : **respiration lente** (5 s par souffle, de 100 % à 5 %), **croisement** (une lumière
   part de chaque bout, elles se croisent au milieu et continuent jusqu'à l'autre bout, ~4 s),
@@ -112,6 +117,9 @@ Documentation :
 - **Mode nuit**, activé par défaut : de 19 h (heure d'hiver) ou 21 h (heure d'été) à 7 h, tout le
   ruban (couleur permanente, animations, jauge) à 20 %. Heures et luminosité réglables sous le
   bouton « Réglages » de l'app (avec les autres nombres) et « Horaires et luminosité » sur la page iPhone.
+  Sous « Mode nuit », l'app et la page iPhone montrent l'heure vue par l'app (0.30) : heure d'été ou
+  d'hiver, fuseau, heure de début de la nuit ce soir et date du prochain changement, par exemple
+  « Heure d'hiver (Europe/Paris) · nuit à 19 h · été le 28/03/2027 → 21 h ».
 - **Deux couleurs** réglables dans l'app, chacune avec trois barres (teinte, saturation, luminosité) :
   couleur permanente, et couleur d'alerte (rouge 100 % par défaut, réservée aux portes, coffre, frunk et warnings).
 - Écran sombre en cartes (0.29) : en haut la connexion au ruban et « Mise à jour des animations » ;
@@ -140,7 +148,9 @@ permanente). Il se prépare avec le [simulateur](simulateur/README.md), qui l'ex
 - Un fichier refusé ou abîmé laisse les animations en place. Le fichier est gardé dans le stockage
   privé de l'app (`files/animations.json`) ; sans lui, les valeurs intégrées (celles du fichier à la
   0.28).
-- L'allumage, l'extinction, l'alerte, la marche arrière, l'Autosteer et la jauge restent dans l'app.
+- Depuis la 0.30, le fichier règle aussi la fréquence de l'animation à l'arrêt (`arret.une_fois_sur`,
+  1 = à chaque arrêt) et les seuils jaune / rouge de la marche arrière (`marche_arriere`).
+- L'allumage, l'extinction, l'alerte, les couleurs de la marche arrière, l'Autosteer et la jauge restent dans l'app.
 
 ## Journaux (0.20)
 

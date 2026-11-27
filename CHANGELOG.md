@@ -2,6 +2,14 @@
 
 Chaque version publiée a ici sa section `## <versionName>` : `release.sh` la reprend comme texte de la release GitHub (et refuse de publier sans elle).
 
+## 0.30
+
+- **Animation à l'arrêt à chaque arrêt** (c'était 1 fois sur 4). La fréquence se règle maintenant dans le **fichier des animations** (`arret.une_fois_sur`), donc avec « Mise à jour des animations », sans nouvelle version de l'app ; le champ « Arrêt : 1 sur » a disparu des réglages.
+- **Marche arrière jaune → rouge** : l'app lit les radars arrière (code 4). Avec un obstacle, le ruban passe en couleur fixe du jaune (loin) au rouge (tout près) ; sans obstacle, le blanc qui respire comme avant. Seuils (`marche_arriere.rouge_a` / `jaune_a`) dans le fichier des animations.
+- **Heure d'été / d'hiver affichée** sous « Mode nuit » (écran et iPhone) : celle que l'app voit, le fuseau, l'heure de début de la nuit ce soir et la date du prochain changement.
+- **Portes ouvertes : clignotement jusqu'à la fermeture** (plus de durée maximale ; le champ « Durée max » a disparu).
+- **Recharge sans alerte** : dès que la recharge commence, le ruban passe à la jauge verte même si une porte ou le coffre clignotait ; pendant la recharge, ouvrir ou fermer une porte, le coffre ou le frunk (et les warnings) ne fait plus clignoter en rouge.
+
 ## 0.29
 
 - **« Mise à jour des animations » tout en haut**, sur la première ligne, à droite de l'état de la connexion au ruban. Les étapes et la barre s'affichent dans une fenêtre (aussi quand la mise à jour est lancée depuis l'iPhone).

@@ -378,6 +378,7 @@ final class RemoteServer {
         }
         b.append("},");
         str(b, "night", nightText(s)).append(',');
+        str(b, "clock", s.clockText()).append(',');
         b.append("\"nightVals\":[").append(s.nightStartWinter).append(',').append(s.nightStartSummer).append(',')
             .append(s.nightEnd).append(',').append(s.nightPct).append("],");
         // the updates (0.28), wherever they were started

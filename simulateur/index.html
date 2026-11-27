@@ -135,9 +135,11 @@ function* gauge() {
 /* ---------- le fichier des animations (animations/animations.json, lu par l'app depuis la 0.28) ---------- */
 // mêmes valeurs que le fichier du dépôt ; remplacées par lui s'il est servi à côté (voir README)
 let A = {
-  format: 1, version: 1, date: "2026-11-25",
-  description: "Fond éteint pour Croisement, Du centre vers les bouts et Scintillement ; Respiration lente jusqu'à 5 %",
+  format: 1, version: 2, date: "2026-11-27",
+  description: "Animation à chaque arrêt ; marche arrière jaune → rouge avec les radars (app 0.30)",
   image_ms: 150,
+  arret: { une_fois_sur: 1 },
+  marche_arriere: { rouge_a: 2, jaune_a: 8 },
   respiration: { min: 5, souffle_s: 5 },
   croisement: { fond: 0, traine: 0.07, trajet_s: 3.2, pause_s: 0.6 },
   centre: { fond: 0, traine: 0.07, trajet_s: 1.8, pause_s: 0.6 },
@@ -243,7 +245,7 @@ function showParams() {
 function loadFile(o, from) {
   if (!o || o.format !== 1) { note("Fichier refusé : « format » doit valoir 1"); return; }
   const def = A;
-  for (const k of ["respiration", "croisement", "centre", "scintillement", "vague"]) o[k] = Object.assign({}, def[k], o[k] || {});
+  for (const k of ["arret", "marche_arriere", "respiration", "croisement", "centre", "scintillement", "vague"]) o[k] = Object.assign({}, def[k], o[k] || {});
   o.image_ms = o.image_ms || 150; o.enregistrees = o.enregistrees || [];
   A = o; buildButtons(); showParams();
   note("Chargé " + from + " : version " + A.version + (A.date ? " du " + A.date : ""));
